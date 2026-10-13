@@ -45,7 +45,8 @@ if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ -f "$sk" ]; then
     h=$(sed -n 's/.*Generated at commit: \([0-9a-f]\{7,40\}\).*/\1/p' "$sk" | head -n 1)
     if [ -n "$h" ] && git -C "$ROOT" cat-file -e "$h^{commit}" 2>/dev/null; then
-      behind=$(git -C "$ROOT" rev-list --count "$h..HEAD" 2>/dev/null || echo 0)
+      # only commits that change code count (committing .ai/ or .claude/ itself does not make the map stale)
+      behind=$(git -C "$ROOT" rev-list --count "$h..HEAD" -- . ':(exclude).ai' ':(exclude).claude' 2>/dev/null || echo 0)
       if [ "${behind:-0}" -gt 0 ] 2>/dev/null; then
         echo ".ai/context/skeleton.md is $behind commit(s) behind HEAD (refresh-skeleton skill updates it)."
       fi

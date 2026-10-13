@@ -218,6 +218,16 @@ ENTRY_DIR_TAGS = [
 ]
 NEXT_PAGE = re.compile(r"(^|/)app/(.*/)?(page|route|layout)\.(tsx|ts|jsx|js)$")
 NEXT_PAGES_API = re.compile(r"(^|/)pages/(api/.*)\.(tsx|ts|jsx|js)$")
+# plain PHP (no framework): front controllers and hand-written path checks
+PHP_FRONT = re.compile(r"\$_SERVER\[\s*['\"](REQUEST_URI|PATH_INFO)['\"]\s*\]")
+PHP_PATH_CHECK = re.compile(
+    r"\$\w*(?:path|uri|route|url)\w*\s*(?:===|!==|==|!=)\s*['\"](/[^'\"]*)['\"]"
+    r"|['\"](/[^'\"]*)['\"]\s*(?:===|!==|==|!=)\s*\$\w*(?:path|uri|route|url)\w*"
+    r"|^\s*case\s+['\"](/[^'\"]*)['\"]\s*:", re.I)
+PHP_CLI_HINT = re.compile(r"\$argv\b|PHP_SAPI\s*===?\s*['\"]cli['\"]|php_sapi_name\(\)|STDIN|STDOUT")
+# client code calling the backend
+JS_API_CALL = re.compile(r"\b(fetch|axios\.(get|post|put|patch|delete)|\$http\.(get|post|put|patch|delete))\(\s*[`'\"](/[^`'\"?$]*)")
+DOCKER_CMD = re.compile(r"^\s*(ENTRYPOINT|CMD)\s+(.+)$")
 
 
 def clean_handler(h):
@@ -230,10 +240,21 @@ def clean_handler(h):
 
 def scan_entries(rel, lines, lang, entries):
     main_rx = MAIN_FN.get("cpp" if lang == "cpph" else lang)
+    if lang == "php":
+        text = "\n".join(lines)
+        if PHP_FRONT.search(text):
+            entries.append(f"FRONT CONTROLLER {rel} (routes requests by URL path)")
+        elif (("/" not in rel or rel.split("/")[0] in ("bin", "scripts", "script", "cli", "console"))
+              and not re.search(r"^\s*(?:final\s+|abstract\s+)?(?:class|interface|trait|enum)\s+\w+", text, re.M)
+              and (PHP_CLI_HINT.search(text) or re.search(r"^\s*(?:require|include)(?:_once)?\b", text, re.M))):
+            entries.append(f"CLI SCRIPT {rel} (run: php {rel})")
     for i, line in enumerate(lines, 1):
         if main_rx and main_rx.search(line):
             entries.append(f"MAIN {rel}:{i}")
         if lang == "php":
+            m = PHP_PATH_CHECK.search(line)
+            if m:
+                entries.append(f"ROUTE {m.group(1) or m.group(2) or m.group(3)} (path check)  ({rel}:{i})")
             m = LARAVEL_ROUTE.search(line)
             if m:
                 verb, uri, handler, name = m.groups()
@@ -250,6 +271,9 @@ def scan_entries(rel, lines, lang, entries):
             m = NEST_ROUTE.search(line)
             if m:
                 entries.append(f"ROUTE {m.group(1).upper()} {m.group(2) or '/'}  ({rel}:{i})")
+            m = JS_API_CALL.search(line)
+            if m:
+                entries.append(f"CLIENT CALL {m.group(1)} {m.group(4)}  ({rel}:{i})")
         elif lang == "py":
             m = FLASK_ROUTE.search(line)
             if m:
@@ -446,6 +470,22 @@ def build(root, max_chars, includes, engine_name):
             symbols = regex_symbols(lines, lang)
             used["regex"] += 1
         per_file.append((rel, len(lines), symbols))
+
+    # container start commands (Dockerfile ENTRYPOINT / CMD)
+    for rel in run_git(root, "ls-files").splitlines():
+        base = rel.rsplit("/", 1)[-1]
+        if not (base.startswith("Dockerfile") or base.endswith(".Dockerfile")):
+            continue
+        if includes and not any(rel.startswith(i.rstrip("/") + "/") for i in includes):
+            continue
+        try:
+            with open(os.path.join(root, rel), encoding="utf-8", errors="ignore") as fh:
+                for i, line in enumerate(fh, 1):
+                    m = DOCKER_CMD.match(line)
+                    if m:
+                        entries.append(f"CONTAINER {m.group(1)} {clip(m.group(2), 70)}  ({rel}:{i})")
+        except OSError:
+            pass
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     engines = ", ".join(f"{k}: {v} files" for k, v in sorted(used.items())) or "none"
