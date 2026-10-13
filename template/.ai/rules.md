@@ -2,19 +2,22 @@
 
 This is the operating manual for any AI agent working in this repo (Claude Code, Antigravity/Gemini, others).
 Project-specific facts live in the other files under `.ai/`. Keep this file under ~150 lines.
+Section 0 belongs to this project. Sections 1–9 are maintained by the God of Code kit (re-running its
+installer updates them); put project-specific rules in section 0 or below the kit block.
 
-## 0. Project commands (fill in during onboarding)
+## 0. Project commands and project rules (fill in during onboarding)
 
 | Action | Command |
 |---|---|
 | Install deps | `TODO` |
 | Run app locally | `TODO` |
-| Unit tests | `TODO` |
+| Unit tests (quiet, fail-fast) | `TODO` |
 | Single test | `TODO` |
 | Lint / format | `TODO` |
 | Type check / static analysis | `TODO` |
 | Build | `TODO` |
 
+<!-- god-of-code:core:begin -->
 ## 1. Session start protocol
 
 1. Read `.ai/memory/state.md` (working memory), `.ai/tasks.md` (In progress / Blocked), `.ai/memory/questions.md` (open questions).
@@ -30,6 +33,7 @@ Order of lookup, cheapest first:
 4. `grep` / `glob` for the exact symbol → read only the line range you need.
 5. Read a whole file only when you will edit most of it.
 
+Send independent searches together in one turn rather than one after another, and list matching files before reading any content.
 Do not read entire directories "to get a feel". For big sweeps, delegate to a read-only subagent and keep only its conclusions.
 
 ## 3. Changing existing code
@@ -41,15 +45,24 @@ Before editing:
 
 While editing:
 - Small, single-concern diffs. One task = one logical change.
-- Tests first when feasible: write or update a test that fails for the right reason, then make it pass.
-- Never delete or weaken a test to make it pass. Never edit generated files; edit their source.
+- Tests first when feasible: write a **new** test that fails for the right reason, then make it pass.
+- Never delete or weaken a test to make it pass. Changing a test that already exists in HEAD needs the human's approval (a hook asks). Never edit generated files; edit their source.
+
+**Two-failure rule (no flailing).** If the same goal fails twice in a row with no forward progress (tests still red for the same reason, or new errors piling up):
+1. Stop patching on top of patches.
+2. Undo only your own edits for this attempt: restore the files listed under *Files touched this task* in `state.md` with `git checkout -- <files>`, or ask the human to run `/rewind`. Never `git reset --hard` or `git stash` the whole tree — the human may have uncommitted work.
+3. Record in `state.md` → *Discarded hypotheses*: what you tried, the exact error, why it failed.
+4. Try one genuinely different hypothesis. If that also fails, stop and ask the human, with both attempts summarised.
+
+**Run tests quietly and fail-fast** so output does not flood context, e.g. `php artisan test --stop-on-failure`, `pytest -q -x`, `vitest run --reporter=dot --bail 1`, `npm test -- --bail 1`, `go test -failfast ./...`, `cargo test -q`, `ctest --output-on-failure --stop-on-failure`. Run a single test file while iterating; the full suite once before done.
 
 ## 4. Done means verified
 
 A task is done only when all of these hold:
 - Relevant tests, lint and type checks were **run** (not assumed) and pass, or the failure is unrelated and reported.
 - For non-trivial changes, the `code-reviewer` subagent reviewed the diff and its findings were fixed or answered.
-- High-risk changes (payments, auth, data migration, concurrency, money/finance logic) get a second opinion from a different model (second-opinion skill) before merge.
+- Bug fixes and risky changes: the `qa-skeptic` subagent confirmed the reproduction test fails before and passes after, found no regressions, and its adversarial test failures were fixed or answered.
+- High-risk changes (payments, auth, data migration, concurrency, money/finance logic) also get a second opinion from a different model (second-opinion skill) before merge.
 - The project brain is updated (section 6).
 
 ## 5. Question protocol (ask, don't guess, when it matters)
@@ -66,20 +79,9 @@ When the answer would not change the code much, do not ask: pick the most reason
 
 ## 6. Keep the brain updated (the project folder `.ai/`)
 
-| When | Update |
-|---|---|
-| Task starts / changes status | `tasks.md` (In progress / Todo / Blocked / Done) |
-| End of every working turn that changed code | `memory/state.md` (goal, facts, discarded hypotheses, blocker, next action) |
-| A design or technology choice is made | `memory/decisions.md` (one ADR entry) |
-| A business flow is understood | `context/flows/<flow>.md` + link in `context/map.md` |
-| Module internals change (data model, contracts, sequences) | `lld.md` |
-| Build / deploy / env knowledge discovered | `deployment.md` |
-| Test commands, fixtures, gaps discovered | `testing.md` |
-| New domain term | `glossary.md` |
-| Files / classes added, moved or renamed | refresh `context/skeleton.md` |
-
-Keep `state.md` under ~60 lines: it is a scratchpad, not a log. Move finished detail into the right file.
-Write facts with sources (`path/file.php:42`), not guesses. Mark unverified items `(unverified)`.
+- Task status changes → `tasks.md`. Every working turn that changed code → `memory/state.md` (the stop hook reminds you).
+- Everything else (decisions, flows, LLD, testing, deployment, glossary, skeleton): the sync-brain skill says which file gets what.
+- Keep `state.md` under ~60 lines: it is a scratchpad, not a log. Write facts with sources (`path/file.php:42`); mark guesses `(unverified)`.
 
 ## 7. Safety
 
@@ -95,3 +97,4 @@ Write facts with sources (`path/file.php:42`), not guesses. Mark unverified item
 ## 9. End-of-task report (keep it short)
 
 1. What changed (files, behaviour) 2. How it was verified (commands + result) 3. Risks / follow-ups 4. Brain files updated.
+<!-- god-of-code:core:end -->

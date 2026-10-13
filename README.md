@@ -10,6 +10,7 @@ understands new repos, traces business logic, writes and changes code test-first
 |---|---|---|
 | **Driver**: explore, plan, implement, refactor, debug | Claude Code with **Opus 5.5** | Strongest coder of the two; skills, hooks, subagents, plan mode |
 | **Fresh-eyes reviewer** (same family) | `code-reviewer` subagent (Opus, read-only, clean context) | Catches what the author missed; runs on every non-trivial diff |
+| **Skeptical QA** | `qa-skeptic` subagent in a scratch git worktree | Proves the new test fails before the fix and passes after, checks regressions, writes edge-case tests to break the change. Bug fixes and risky changes |
 | **Cross-model reviewer** (different family) | Antigravity CLI `agy` with **Gemini Pro** via `/second-opinion` | Different training → different blind spots. Use on payments, auth, finance, migrations, concurrency |
 | **Big-context sweeps and fallback** | `agy` with Gemini Pro | Whole-module reading when you hit Claude limits, or when Claude is unavailable |
 | **Shared memory for both** | `.ai/` folder + `AGENTS.md` / `GEMINI.md` | Both agents read the same rules, state and docs, so you can switch mid-task |
@@ -21,7 +22,8 @@ AGENTS.md            → imports .ai/rules.md (read by Claude Code and most agen
 CLAUDE.md            → imports AGENTS.md + Claude-specific notes
 GEMINI.md            → tells Gemini/Antigravity to read the same rules; default role = reviewer
 .ai/                 → the project brain (one folder per project, updated as you work)
-  rules.md             rule book: commands, JIT exploration order, question protocol, definition of done
+  rules.md             rule book: §0 your commands/rules; §1-9 kit rules (exploration order, two-failure rule,
+                       quiet tests, question protocol, definition of done)
   prd.md architecture.md lld.md design.md deployment.md testing.md glossary.md
   tasks.md             board: In progress / Blocked / Todo / Done
   memory/state.md      working scratchpad (structured state, pattern 3)
@@ -33,8 +35,11 @@ GEMINI.md            → tells Gemini/Antigravity to read the same rules; defaul
   review/              review packets + Gemini findings (gitignored)
 .claude/
   skills/              onboard-repo, refresh-skeleton, trace-flow, start-task, sync-brain, write-lld, ops-docs, second-opinion
-  agents/code-reviewer.md
-  god/hooks/           session_start.sh (loads the brain), stop_check.sh (forces brain updates)
+  agents/              code-reviewer.md (read-only review), qa-skeptic.md (adversarial QA in a worktree)
+  god/hooks/           session_start.sh (loads the brain), stop_check.sh (forces brain updates),
+                       pretool_guard (protects existing tests, nudges test-less commits),
+                       qa_write_guard.sh (QA may only write in .ai/review/)
+  god/qa_worktree.sh   scratch worktrees for QA: create / add-file / apply / remove / cleanup
   settings.json        hooks, Opus as default model, deny rules for .env and force-push
 ```
 
@@ -44,6 +49,7 @@ GEMINI.md            → tells Gemini/Antigravity to read the same rules; defaul
 2. **Antigravity CLI** (`agy`): install it and sign in with the Google account that has Google AI Pro. Gemini CLI was retired for AI Pro users on 18 June 2026; `agy` replaced it and can import old Gemini CLI settings on first run.
 3. Put this kit in **your own GitHub repo** (e.g. `god-of-code-kit`) so every machine and Codespace can `git clone` it.
 4. Windows: run the installer from Git Bash (or WSL). Hooks call `bash`, so Git's `bash.exe` must be on PATH; if hooks fail, run Claude Code inside WSL.
+5. Python 3.8+ is required (installer, test guard, skeleton). Optional, for more accurate skeleton maps: `pip install tree-sitter-language-pack` (grammars download on first use).
 
 ## 4. Install into a project
 
@@ -53,7 +59,7 @@ git clone https://github.com/<you>/god-of-code-kit ~/god-of-code-kit
 ~/god-of-code-kit/install.sh ~/code/client-repo --private  # private: nothing committed (client/employer code)
 ```
 
-Re-running upgrades skills/hooks and never overwrites what's already in `.ai/`. An existing `model` setting is kept, so check `/model`.
+**Upgrading:** `git pull` the kit, then re-run the same install command. Skills, agents and hooks are replaced; in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `.ai/rules.md` only the part between `<!-- god-of-code ... begin/end -->` markers is replaced, so your own text (and `rules.md` section 0) is kept. Everything else in `.ai/` is never overwritten. An existing `model` setting is kept, so check `/model`. Repos installed before markers existed get `.ai/rules.md.kit-new` to merge once.
 
 **Private mode** writes `CLAUDE.local.md` and `.claude/settings.local.json` and hides all kit files with `.git/info/exclude`. Trade-off: cloud sessions (claude.ai/code on your phone) clone from GitHub and will not see private-mode files.
 
@@ -63,7 +69,8 @@ Re-running upgrades skills/hooks and never overwrites what's already in `.ai/`. 
 |---|---|
 | First time in a repo | `/onboard-repo` → reads skeleton + manifests, fills `.ai/`, asks you the top questions |
 | Before touching business logic | `/trace-flow booking checkout` → `.ai/context/flows/booking-checkout.md` with file:line sources + sequence diagram |
-| Any feature / change / bug | `/start-task <description>` → clarify → impact analysis → plan → tests first → implement → verify → reviewer subagent → brain update |
+| Any feature / change / bug | `/start-task <description>` → clarify → impact analysis → plan → new tests first → implement → verify → `code-reviewer` (+ `qa-skeptic` for fixes/risky work) → brain update |
+| Check a fix properly | ask Claude to "use the qa-skeptic agent on this change" → fail-before / pass-after / regressions / adversarial tests report |
 | Module design | `/write-lld payments` |
 | Deploy / test knowledge | `/ops-docs`, then `/run-skill-generator` once so `/run` and `/verify` can launch the app |
 | Risky diff | `/second-opinion current diff` → Gemini reviews from a packet in `.ai/review/` |
@@ -85,10 +92,16 @@ Built-in Claude Code commands worth using alongside: plan mode, `/code-review`, 
 
 - **SessionStart** (`startup|resume|clear|compact`): prints `state.md`, In-progress/Blocked tasks, open-question count, git branch, and warns if `skeleton.md` is behind HEAD. After auto-compaction it reloads the same, so the agent never loses the thread.
 - **Stop**: if code files changed after `state.md` was last updated, it blocks once per prompt and asks the agent to update `state.md` and `tasks.md`. It never loops. Remove the `Stop` entry from settings to turn it off.
+- **PreToolUse (test guard)**: before Edit/Write or a shell command (`sed -i`, `>`, `rm`, `mv`, `git checkout/restore/rm` …) touches a test file that already exists in HEAD, you get an approval prompt. New test files are never blocked. Before a `git commit` (including `-a`) that changes source but no tests, you get an approval prompt too. It asks, never refuses, and does nothing outside git repos.
+- **qa-skeptic only**: while that subagent runs, writes outside `.ai/review/` are denied.
+
+The two-failure rule, quiet test commands and batched searches are rules in `.ai/rules.md`, not hooks: they need judgment, and a hook that hard-resets or truncates would destroy your uncommitted work or the failing assertion.
 
 ## 8. Limits to know
 
 - No setup makes a model "never wrong". The gains come from discipline: tests as the judge, a fresh reviewer, a cross-model reviewer, and memory that survives sessions.
-- `skeleton.py` is regex-based and approximate (PHP, TS/JS, Python, Go, Java/Kotlin, C#, Ruby; Laravel/Express/Nest/Flask routes, Next.js pages, Laravel schedules/jobs/commands). One-line class bodies are only partly mapped.
+- `skeleton.py` covers PHP, TS/JS, Python, Go, Java/Kotlin, C#, Ruby, Rust and C/C++, plus Laravel/Express/Nest/Flask/actix/axum routes, Next.js pages, Laravel schedules/jobs/commands and `main` functions. Without tree-sitter it is regex-based: multi-line signatures and one-line class bodies are only partly mapped. With tree-sitter installed it parses properly; if that ever crashes, use `--engine regex`.
+- The test guard recognises tests by folder (`tests/`, `__tests__/`, `spec/` …) and name (`*_test.go`, `*.spec.ts`, `FooTest.php` …). Rust unit tests inside `src/` files (`#[cfg(test)]`) are not seen as tests, so a commit that only adds such tests still gets the "no tests" prompt — just approve it.
+- `qa-skeptic` links `vendor/`, `node_modules/` and virtualenvs into its worktree and copies env files, but tests that need a database, Docker or other services may not run there; it then says so and verifies in your working tree read-only.
 - `/second-opinion` only runs `agy` automatically if `agy --help` shows a non-interactive prompt flag; otherwise it gives you the exact prompt to paste.
 - Antigravity's Pro quota refreshes on a rolling window under a weekly cap, and users have reported multi-day lockouts, so keep Gemini for review and fallback rather than as the main driver.
