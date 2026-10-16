@@ -106,6 +106,22 @@ if "$PY" -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('mo
   say note "$(rel "$SETTINGS") keeps your existing \"model\" setting — check /model if you want Opus"
 fi
 
+# 4b. Decision gate: in private mode, mark the repo private so remote models (e.g. Jev) are refused.
+if [ "$MODE" = private ] && [ -f "$REPO/.ai/decision-gate.json" ]; then
+  "$PY" - "$REPO/.ai/decision-gate.json" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+with open(p, encoding="utf-8") as fh:
+    cfg = json.load(fh)
+if cfg.get("private") is not True:
+    cfg["private"] = True
+    with open(p, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+        fh.write("\n")
+PYEOF
+  say note ".ai/decision-gate.json marked private: remote decision models are refused in this repo"
+fi
+
 # 5. Git ignore rules.
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
   if [ "$MODE" = private ]; then
@@ -115,7 +131,8 @@ if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
     for p in .ai/ .claude/god/ .claude/agents/code-reviewer.md .claude/agents/qa-skeptic.md CLAUDE.local.md \
              .claude/settings.local.json .claude/skills/refresh-skeleton/ .claude/skills/onboard-repo/ \
              .claude/skills/trace-flow/ .claude/skills/start-task/ .claude/skills/sync-brain/ \
-             .claude/skills/write-lld/ .claude/skills/ops-docs/ .claude/skills/second-opinion/; do
+             .claude/skills/write-lld/ .claude/skills/ops-docs/ .claude/skills/second-opinion/ \
+             .claude/skills/ready-gate/; do
       grep -qxF "$p" "$EX" || echo "$p" >> "$EX"
     done
     say exclude "$(rel "$EX") (kit files stay local, never committed)"

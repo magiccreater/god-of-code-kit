@@ -1,0 +1,66 @@
+{
+  "_help": [
+    "Decision gate config (project-owned; the kit installer never overwrites it).",
+    "mode: off = does nothing | advisory = reports, never blocks | required = anything but 'ready' fails, and git push / gh pr create need a fresh 'ready' receipt.",
+    "checks: deterministic commands run first, in order (copy them from .ai/rules.md section 0). If any fails, the model is not asked.",
+    "provider.url: laya-serve (default port 8000), vega_server.py (8765) or https://api.typesafe.ai for Jev. Remote URLs are refused for private repos.",
+    "provider.model: sent as 'model' (e.g. jev-1.13.0). provider.expected_model: refuse answers from any other model.",
+    "questions: noul = yes/no probability; pass_when {max|min} on P(yes); choice: {in: [...]}; score: {min|max}. Answers below min_confidence count as unsure.",
+    "Run `python .claude/god/decide/decision_gate.py calibrate --data labelled.jsonl` before trusting thresholds."
+  ],
+  "mode": "off",
+  "private": false,
+  "checks": [],
+  "check_timeout_seconds": 1800,
+  "min_confidence": 0.7,
+  "provider": {
+    "name": "laya",
+    "url": "http://127.0.0.1:8000",
+    "path": "/v1/systemone",
+    "api_key_env": "DECISION_GATE_API_KEY",
+    "model": null,
+    "expected_model": null,
+    "timeout_seconds": 10,
+    "allow_remote_in_private_repo": false
+  },
+  "input": {
+    "max_chars": 6000,
+    "on_truncation": "needs_review"
+  },
+  "questions": {
+    "high_risk": {
+      "type": "noul",
+      "instructions": "Does this change alter money or payment calculations, authentication or authorization, data deletion, database schema or migrations, or concurrent or background processing?",
+      "pass_when": {
+        "max": 0.5
+      },
+      "on_fail": "High-risk area: run the qa-skeptic agent; for payments, auth or migrations also run /second-opinion."
+    },
+    "unfinished": {
+      "type": "noul",
+      "instructions": "Does the diff add unfinished work: TODO or FIXME notes, debug output, commented-out code, placeholder values, or skipped or disabled tests?",
+      "pass_when": {
+        "max": 0.5
+      },
+      "on_fail": "Finish or remove leftover TODOs, debug output, placeholders or skipped tests."
+    },
+    "unrelated": {
+      "type": "noul",
+      "instructions": "Does the diff contain changes unrelated to the task goal?",
+      "requires_goal": true,
+      "pass_when": {
+        "max": 0.5
+      },
+      "on_fail": "Split unrelated changes into their own task, or explain them in .ai/memory/state.md."
+    },
+    "complete": {
+      "type": "noul",
+      "instructions": "Does the diff fully implement the task goal, including tests for the new behaviour?",
+      "requires_goal": true,
+      "pass_when": {
+        "min": 0.5
+      },
+      "on_fail": "The change may not fully implement the goal: compare it with the task; add missing parts or tests."
+    }
+  }
+}

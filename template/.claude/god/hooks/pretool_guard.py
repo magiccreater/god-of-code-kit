@@ -71,8 +71,63 @@ def ask(reason):
     sys.exit(0)
 
 
+def deny(reason):
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    }}))
+    sys.exit(0)
+
+
 def protected(root, rel):
     return rel is not None and is_test(rel) and in_head(root, rel)
+
+
+GATE_CONFIG = ".ai/decision-gate.json"
+GATE_CONFIG_MSG = ("{f} defines what the decision gate accepts as 'ready'. Approve only if you asked for this "
+                   "change: lowering thresholds, removing checks or questions, or changing mode weakens the gate.")
+
+
+def load_gate():
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(os.path.dirname(here), "decide"))
+    import decision_gate  # noqa: E402
+    return decision_gate
+
+
+def is_publication(argv):
+    prog = os.path.basename(argv[0]) if argv else ""
+    if prog == "git":
+        i = 1
+        while i < len(argv) and argv[i] in ("-C", "-c"):
+            i += 2
+        return i < len(argv) and argv[i] == "push"
+    return prog == "gh" and len(argv) >= 3 and argv[1] == "pr" and argv[2] in ("create", "merge")
+
+
+def check_publication(root, command):
+    """In required mode, publishing needs a fresh 'ready' receipt from the decision gate."""
+    if not any(is_publication(argv) for argv in split_commands(command)):
+        return
+    try:
+        gate = load_gate()
+    except Exception:
+        return  # gate not installed: nothing to enforce
+    try:
+        cfg = gate.load_config(root)
+    except gate.GateError as exc:
+        ask("Decision gate config problem (%s). Approve to publish anyway." % exc)
+        return
+    if cfg["mode"] != "required":
+        return
+    try:
+        allowed, reason = gate.publication_check(root)
+    except Exception as exc:  # required mode fails closed
+        deny("Decision gate (required mode) could not verify this change: %s" % exc)
+        return
+    if not allowed:
+        deny("Decision gate (required mode): %s" % reason)
 
 
 TEST_GUARD_MSG = ("{f} is an existing test (it is in HEAD). Changing existing tests can hide "
@@ -85,6 +140,8 @@ def check_file_tool(root, cwd, tool_input):
     rel = to_rel(root, path, cwd)
     if protected(root, rel):
         ask(TEST_GUARD_MSG.format(f=rel))
+    if rel == GATE_CONFIG and os.path.exists(os.path.join(root, rel)):
+        ask(GATE_CONFIG_MSG.format(f=rel))
 
 
 WRITE_ALL_ARGS = {"rm", "unlink", "mv", "truncate", "shred"}
@@ -147,7 +204,10 @@ def check_bash(root, cwd, command):
         rel = to_rel(root, t, cwd)
         if protected(root, rel):
             ask(TEST_GUARD_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
+        if rel == GATE_CONFIG:
+            ask(GATE_CONFIG_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
     check_commit(root, command)
+    check_publication(root, command)
 
 
 def check_commit(root, command):

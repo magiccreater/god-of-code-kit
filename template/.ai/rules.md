@@ -63,6 +63,7 @@ A task is done only when all of these hold:
 - For non-trivial changes, the `code-reviewer` subagent reviewed the diff and its findings were fixed or answered.
 - Bug fixes and risky changes: the `qa-skeptic` subagent confirmed the reproduction test fails before and passes after, found no regressions, and its adversarial test failures were fixed or answered.
 - High-risk changes (payments, auth, data migration, concurrency, money/finance logic) also get a second opinion from a different model (second-opinion skill) before merge.
+- If `.ai/decision-gate.json` mode is advisory or required: the ready-gate skill ran and every "Next" item was handled. Its verdict is one signal on top of the checks, never a substitute; never edit its config to make it pass.
 - The project brain is updated (section 6).
 
 ## 5. Question protocol (ask, don't guess, when it matters)

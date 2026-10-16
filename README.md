@@ -34,12 +34,14 @@ GEMINI.md            → tells Gemini/Antigravity to read the same rules; defaul
   context/flows/       one file per traced business flow
   review/              review packets + Gemini findings (gitignored)
 .claude/
-  skills/              onboard-repo, refresh-skeleton, trace-flow, start-task, sync-brain, write-lld, ops-docs, second-opinion
+  skills/              onboard-repo, refresh-skeleton, trace-flow, start-task, sync-brain, write-lld, ops-docs, second-opinion, ready-gate
   agents/              code-reviewer.md (read-only review), qa-skeptic.md (adversarial QA in a worktree)
   god/hooks/           session_start.sh (loads the brain), stop_check.sh (forces brain updates),
                        pretool_guard (protects existing tests, nudges test-less commits),
                        qa_write_guard.sh (QA may only write in .ai/review/)
   god/qa_worktree.sh   scratch worktrees for QA: create / add-file / apply / remove / cleanup
+  god/decide/          decision_gate.py (optional readiness gate), vega_server.py (vegaml over HTTP)
+.ai/decision-gate.json decision gate config: mode, checks, model server, questions, thresholds (off by default)
   settings.json        hooks, Opus as default model, deny rules for .env and force-push
 ```
 
@@ -93,11 +95,50 @@ Built-in Claude Code commands worth using alongside: plan mode, `/code-review`, 
 - **SessionStart** (`startup|resume|clear|compact`): prints `state.md`, In-progress/Blocked tasks, open-question count, git branch, and warns if `skeleton.md` is behind HEAD. After auto-compaction it reloads the same, so the agent never loses the thread.
 - **Stop**: if code files changed after `state.md` was last updated, it blocks once per prompt and asks the agent to update `state.md` and `tasks.md`. It never loops. Remove the `Stop` entry from settings to turn it off.
 - **PreToolUse (test guard)**: before Edit/Write or a shell command (`sed -i`, `>`, `rm`, `mv`, `git checkout/restore/rm` …) touches a test file that already exists in HEAD, you get an approval prompt. New test files are never blocked. Before a `git commit` (including `-a`) that changes source but no tests, you get an approval prompt too. It asks, never refuses, and does nothing outside git repos.
+- **PreToolUse (decision gate)**: only in decision-gate `required` mode, `git push` and `gh pr create/merge` are **denied** without a fresh `ready` receipt (section 8). Editing `.ai/decision-gate.json` asks first in every mode.
 - **qa-skeptic only**: while that subagent runs, writes outside `.ai/review/` are denied.
 
 The two-failure rule, quiet test commands and batched searches are rules in `.ai/rules.md`, not hooks: they need judgment, and a hook that hard-resets or truncates would destroy your uncommitted work or the failing assertion.
 
-## 8. Limits to know
+## 8. Decision gate (optional)
+
+A fast typed-decision model (Laya, vegaml or TypeSafe Jev) gives a calibrated "is this change ready?" opinion **after** the deterministic checks pass. It asks four yes/no questions about the diff: high-risk area, unfinished work, unrelated changes, complete for the goal. Off by default.
+
+```bash
+python .claude/god/decide/decision_gate.py check    # or the /ready-gate skill
+python .claude/god/decide/decision_gate.py status   # mode, server, privacy, latest receipt
+python .claude/god/decide/decision_gate.py verify   # does the latest receipt still match the code?
+```
+
+| Rule | What it means |
+|---|---|
+| Checks first | Commands in `checks` run in order; if one fails the verdict is `not_ready` and the model is never asked. No checks configured → never `ready`. |
+| Unsure = not ready | Abstention, several plausible answers, confidence below `min_confidence`, timeout, malformed or non-finite output, an unexpected model, or a truncated diff → `needs_review` / `unavailable`. |
+| Modes | `off` does nothing. `advisory` reports and never blocks. `required`: anything but `ready` exits 1, and the hook **denies** `git push` / `gh pr create` without a fresh `ready` receipt. |
+| Receipts | `.ai/review/receipts/` (gitignored). Bound to base commit + exact diff (incl. untracked files) + config + reported model. Any change → stale. Committing the same content keeps it fresh; editing `.ai/` doesn't count. |
+| No surprise downloads | The gate only makes one HTTP call. Model setup and pinning happen in the model server. |
+| Privacy | Secret-looking values and files like `.env*`, `*.pem` are withheld from the model. Remote endpoints (e.g. Jev) are **refused in private-mode repos**. |
+| Tamper check | Editing `.ai/decision-gate.json` (by Edit/Write or shell) asks you first. |
+
+**Pick a model server** (all speak `POST /v1/systemone`; set `provider.url` in `.ai/decision-gate.json`):
+
+| Server | Start it | Notes |
+|---|---|---|
+| Laya (local) | `pip install "laya[serve]"` then `laya-serve` (port 8000) | Apache-2.0 weights. Base checkpoints are weak on new tasks until fine-tuned. |
+| vegaml (local) | `pip install vegaml`, `python .claude/god/decide/vega_server.py setup` once, then `... serve` (port 8765) | Setup pins a revision and hashes every file; serve runs offline and refuses mismatched files. Adds abstain / prediction-set / unbound signals. Weights licence not stated on Hugging Face. |
+| TypeSafe Jev (hosted) | `provider.url = https://api.typesafe.ai`, key in `$DECISION_GATE_API_KEY`, `provider.model` and `expected_model` = e.g. `jev-1.13.0` | Your diff leaves the machine: shared repos only. |
+
+Speed on a laptop CPU is unmeasured; time `check` before relying on it.
+
+**Before using required mode, measure it on your own history.** None of these models was trained on code-review decisions. Label 50–200 past diffs (JSONL, one per line):
+
+```json
+{"goal": "Fix rounding in refunds", "diff": "<output of git show <sha>>", "labels": {"high_risk": true, "unfinished": false, "complete": true}}
+```
+
+`decision_gate.py calibrate --data labelled.jsonl` prints accuracy, Brier score, calibration error, unsure rate and **missed failures** (real problems the gate would have passed confidently). Aim for zero missed failures; otherwise raise `min_confidence` or tighten `pass_when`.
+
+## 9. Limits to know
 
 - No setup makes a model "never wrong". The gains come from discipline: tests as the judge, a fresh reviewer, a cross-model reviewer, and memory that survives sessions.
 - `skeleton.py` covers PHP, TS/JS, Python, Go, Java/Kotlin, C#, Ruby, Rust and C/C++, plus Laravel/Express/Nest/Flask/actix/axum routes, Next.js pages, Laravel schedules/jobs/commands and `main` functions. Without tree-sitter it is regex-based: multi-line signatures and one-line class bodies are only partly mapped. With tree-sitter installed it parses properly; if that ever crashes, use `--engine regex`.
