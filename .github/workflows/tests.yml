@@ -7,15 +7,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.8", "3.12"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # kit/shipped.sha256 and the upgrade tests read old versions from git history
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
+      # setup-python has no 3.8 for current Ubuntu runners; uv provides any version (the kit supports 3.8+)
+      - uses: astral-sh/setup-uv@v6
+      - name: Python ${{ matrix.python }}
+        run: |
+          uv python install ${{ matrix.python }}
+          mkdir -p "$HOME/bin"
+          ln -sf "$(uv python find ${{ matrix.python }})" "$HOME/bin/python"
+          ln -sf "$(uv python find ${{ matrix.python }})" "$HOME/bin/python3"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - run: python3 --version
       - name: Configure git for test repos
         run: |
           git config --global user.email ci@example.com
