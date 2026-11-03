@@ -3,7 +3,7 @@
 Updated: (date) by (agent)
 
 - **Goal**: (none yet — run /onboard-repo or /start-task)
-- **Current task**: (task id from tasks.md)
+- **Current task**: (task id from tasks.md, e.g. T-031; its spec is .ai/specs/T-031/spec.md)
 - **Confirmed facts**:
   -
 - **Discarded hypotheses** (and why):

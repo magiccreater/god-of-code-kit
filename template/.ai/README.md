@@ -11,6 +11,8 @@ Agents read `rules.md` first, then `memory/state.md` and `tasks.md`.
 | `lld.md` | Low-level design per module: data model, contracts, sequences, edge cases | — |
 | `design.md` | UI design system: typography, colours, spacing, components | — |
 | `tasks.md` | Roadmap and task board: In progress / Todo / Blocked / Done | — |
+| `specs/<T-id>/spec.md` | One spec per task: why, what, acceptance criteria, bug repro steps, convergence (see `specs/README.md`) | Spec-driven work |
+| `readiness.json` | When a task counts as ready to start (mode, scores, skipped items) | Task readiness |
 | `deployment.md` | Environments, build, release, rollback, env var names | — |
 | `testing.md` | Test commands, structure, fixtures, coverage gaps | — |
 | `glossary.md` | Business/domain terms and what they map to in code | — |
@@ -20,4 +22,4 @@ Agents read `rules.md` first, then `memory/state.md` and `tasks.md`.
 | `context/map.md` | Where things live, entry points, links to traced flows | Just-in-time exploration (pattern 4) |
 | `context/skeleton.md` | Generated symbol + entry-point map with line numbers | Skeletonization (pattern 1) |
 | `context/flows/*.md` | One file per traced business flow | Business logic tracing |
-| `review/` | Review packets and second-opinion findings (can be gitignored) | Cross-model review |
+| `review/` | Review packets, second-opinion findings, gate receipts, readiness records (can be gitignored) | Cross-model review |

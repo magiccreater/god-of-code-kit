@@ -4,6 +4,10 @@
 1. Protect existing tests: editing, overwriting, moving or deleting a test file that already
    exists in HEAD needs the human's approval ("ask"). New test files are never blocked.
 2. Commit nudge: `git commit` whose changes touch source code but no tests asks the human first.
+3. Decision gate (required mode): `git push` / `gh pr create|merge` need a fresh "ready" receipt.
+4. Task readiness (required mode): edits to source files need a fresh "ready" readiness record for
+   the current task in .ai/memory/state.md (tests, .ai/, .claude/ and docs are always allowed).
+5. Changes to the gate and readiness config, and to readiness records, ask the human first.
 
 Reads the hook JSON on stdin. Prints a PreToolUse "ask" decision, or nothing (normal permission
 flow). Any internal error fails open (prints nothing): this is a guard rail, not a gate.
@@ -89,11 +93,56 @@ GATE_CONFIG_MSG = ("{f} defines what the decision gate accepts as 'ready'. Appro
                    "change: lowering thresholds, removing checks or questions, or changing mode weakens the gate.")
 
 
-def load_gate():
+READINESS_CONFIG = ".ai/readiness.json"
+READINESS_CONFIG_MSG = ("{f} defines when a task counts as ready to start. Approve only if you asked for this "
+                        "change: lowering scores, skipping items or changing mode weakens the check.")
+READINESS_RECORDS = ".ai/review/readiness/"
+READINESS_RECORD_MSG = ("{f} is a readiness record written by readiness.py. Approve only if you are removing "
+                        "it on purpose; run /task-ready to create or refresh one.")
+
+
+def decide_dir():
     here = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(os.path.dirname(here), "decide"))
+    d = os.path.join(os.path.dirname(here), "decide")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    return d
+
+
+def load_gate():
+    decide_dir()
     import decision_gate  # noqa: E402
     return decision_gate
+
+
+def load_readiness():
+    decide_dir()
+    import readiness  # noqa: E402
+    return readiness
+
+
+def check_readiness(root, rel):
+    """In readiness required mode, source edits need a fresh 'ready' record for the current task."""
+    if rel is None or not is_source(rel) or is_test(rel):
+        return
+    try:
+        rd = load_readiness()
+    except Exception:
+        return  # readiness not installed: nothing to enforce
+    try:
+        cfg = rd.load_config(root)
+    except rd.ReadinessError as exc:
+        ask("Task readiness config problem (%s). Approve to edit %s anyway." % (exc, rel))
+        return
+    if cfg["mode"] != "required":
+        return
+    try:
+        allowed, reason = rd.edit_check(root)
+    except Exception as exc:  # required mode fails closed
+        deny("Task readiness (required mode) could not be checked: %s" % exc)
+        return
+    if not allowed:
+        deny("Task readiness (required mode): %s. Editing %s is blocked until then." % (reason, rel))
 
 
 def is_publication(argv):
@@ -142,6 +191,11 @@ def check_file_tool(root, cwd, tool_input):
         ask(TEST_GUARD_MSG.format(f=rel))
     if rel == GATE_CONFIG and os.path.exists(os.path.join(root, rel)):
         ask(GATE_CONFIG_MSG.format(f=rel))
+    if rel == READINESS_CONFIG and os.path.exists(os.path.join(root, rel)):
+        ask(READINESS_CONFIG_MSG.format(f=rel))
+    if rel and rel.startswith(READINESS_RECORDS):
+        ask(READINESS_RECORD_MSG.format(f=rel))
+    check_readiness(root, rel)
 
 
 WRITE_ALL_ARGS = {"rm", "unlink", "mv", "truncate", "shred"}
@@ -206,6 +260,11 @@ def check_bash(root, cwd, command):
             ask(TEST_GUARD_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
         if rel == GATE_CONFIG:
             ask(GATE_CONFIG_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
+        if rel == READINESS_CONFIG:
+            ask(READINESS_CONFIG_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
+        if rel and rel.startswith(READINESS_RECORDS):
+            ask(READINESS_RECORD_MSG.format(f=rel) + " (shell command writes, moves or deletes it)")
+        check_readiness(root, rel)
     check_commit(root, command)
     check_publication(root, command)
 

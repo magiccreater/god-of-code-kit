@@ -18,6 +18,9 @@ Rules it enforces:
   5. No downloads here. The model server is set up and pinned separately.
   6. Benchmark accuracy is not code-review accuracy: `calibrate` measures the model on your own
      labelled diffs before you trust a threshold.
+  7. When the current task has a spec (.ai/specs/<T-id>/spec.md, see readiness.py), its title, why and
+     acceptance criteria become the goal, and an acceptance criterion that no test names caps the
+     verdict at needs_review.
 
 Speaks POST /v1/systemone, the wire protocol of TypeSafe Jev, laya-serve and vega_server.py.
 Standard library only (Python 3.8+). Config: .ai/decision-gate.json. Receipts: .ai/review/receipts/.
@@ -222,6 +225,27 @@ def read_goal(root, goal_arg=None):
     if not goal or goal.startswith("(") or goal.lower() in ("none", "n/a", "-"):
         return ""
     return goal
+
+
+def task_context(root):
+    """The current task's spec (.ai/specs/<T-id>/spec.md), if readiness.py is installed and a spec exists.
+
+    Returns {"task", "goal", "trace"} or None. Never raises: the spec only adds information."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import readiness  # noqa: E402
+        task = readiness.current_task(root)
+        if not task:
+            return None
+        path = readiness.spec_path(root, task)
+        if not os.path.exists(path):
+            return None
+        text = readiness.read_file(path)
+        return {"task": task, "goal": readiness.spec_goal(text), "trace": readiness.trace(root, task, text)}
+    except Exception:
+        return None
 
 
 def is_private_repo(root, cfg):
@@ -602,6 +626,9 @@ def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
     base = resolve_base(root, base_arg)
     change = collect_change(root, base)
     goal = read_goal(root, goal_arg)
+    task = None if goal_arg else task_context(root)
+    if task and task["goal"]:
+        goal = task["goal"]  # the spec's title, why, requirements and acceptance criteria beat a one-line goal
     prov = cfg["provider"]
     receipt = {
         "gate_version": GATE_VERSION,
@@ -623,6 +650,18 @@ def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
         "input": None, "answers": {},
     }
     caps = []  # reasons that stop "ready" without being failures of the change itself
+    if task:
+        t = task["trace"]
+        receipt["task"] = {"id": task["task"], "criteria": t["criteria"],
+                           "uncovered": [c["id"] for c in t["uncovered"]], "converged": t["converged"],
+                           "open_tasks": t["open_tasks"]}
+        if t["uncovered"]:
+            ids = ", ".join(c["id"] for c in t["uncovered"])
+            caps.append("acceptance criteria with no test naming them: %s" % ids)
+            receipt["advice"].append("Add a test for each of %s and name it after the criterion "
+                                     "(e.g. test_ac_002_...), or explain the gap in the spec." % ids)
+        if not t["converged"]:
+            receipt["advice"].append("Run /converge %s to compare the code with its spec before review." % task["task"])
 
     def finish(verdict, reasons=(), advice=()):
         receipt["verdict"] = verdict

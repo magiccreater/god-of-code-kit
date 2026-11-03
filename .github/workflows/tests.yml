@@ -1,0 +1,29 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # kit/shipped.sha256 and the upgrade tests read old versions from git history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Configure git for test repos
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+      - name: Unit and integration tests
+        run: python -m unittest discover -s tests -v
+      - name: shipped.sha256 is current
+        run: |
+          python kit/kit_files.py shipped . > /tmp/shipped.sha256
+          diff -u kit/shipped.sha256 /tmp/shipped.sha256

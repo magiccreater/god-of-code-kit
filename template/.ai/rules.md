@@ -39,6 +39,7 @@ Do not read entire directories "to get a feel". For big sweeps, delegate to a re
 ## 3. Changing existing code
 
 Before editing:
+- **Task is ready**: the task has a spec in `.ai/specs/<T-id>/spec.md` that the task-ready skill scored ready (why, what, testable acceptance criteria; for bugs: steps to reproduce, expected vs actual, environment). If not, ask for what is missing before writing code. In `.ai/readiness.json` required mode a hook refuses source edits until then.
 - **Impact analysis**: find every caller / importer / route / job / test of what you change (grep the symbol). State the blast radius in one or two lines.
 - **Follow local patterns**: match the style, structure and libraries already used next to the code you touch.
 - **No new dependencies, schema changes, public API changes or config changes without asking.**
@@ -60,6 +61,7 @@ While editing:
 
 A task is done only when all of these hold:
 - Relevant tests, lint and type checks were **run** (not assumed) and pass, or the failure is unrelated and reported.
+- Every acceptance criterion in the task's spec has a test named after it (`test_ac_001_...`), and the converge skill found no gaps (the spec's *Convergence* says converged).
 - For non-trivial changes, the `code-reviewer` subagent reviewed the diff and its findings were fixed or answered.
 - Bug fixes and risky changes: the `qa-skeptic` subagent confirmed the reproduction test fails before and passes after, found no regressions, and its adversarial test failures were fixed or answered.
 - High-risk changes (payments, auth, data migration, concurrency, money/finance logic) also get a second opinion from a different model (second-opinion skill) before merge.
@@ -75,7 +77,7 @@ Stop and ask the human when any of these is true:
 - The action is destructive or hard to reverse (migrations, deletes, force pushes, prod deploys).
 - Context break: memory says X, code says Y, and you cannot tell which is right.
 
-How to ask: at most 4 short, multiple-choice style questions, recommended option first. Log every open question in `.ai/memory/questions.md`.
+How to ask: at most 4 short, multiple-choice style questions, recommended option first (the task-ready skill asks up to 5 about a task spec). Log every open question in `.ai/memory/questions.md`; answers about a task also go into its spec under *Answers*.
 When the answer would not change the code much, do not ask: pick the most reasonable option, write it under **Assumptions** in `state.md`, and continue.
 
 ## 6. Keep the brain updated (the project folder `.ai/`)
