@@ -1,0 +1,17 @@
+{
+  "_help": [
+    "Task readiness config (project-owned; the kit installer never overwrites it). Checked by .claude/god/decide/readiness.py.",
+    "mode: off = does nothing | advisory = scores tasks and asks questions, never blocks | required = edits to source files are refused until the current task (state.md 'Current task') has a fresh 'ready' check.",
+    "ready_score: score (0-100) at or above which a task with every must-have item and no open [NEEDS CLARIFICATION] is ready. ask_score: below this the task is not_ready (rewrite it); in between, answer the questions.",
+    "model.enabled: also ask the decision-gate model (.ai/decision-gate.json provider) whether the acceptance criteria cover the goal, or whether a bug can be reproduced. It can only lower a verdict. Remote models are refused in private repos.",
+    "skip: drop checklist items for this project, with a reason, e.g. {\"reviewers\": \"solo project\"}. Items: why, what, acceptance, fr_coverage, out_of_scope, edge_cases, non_functional, must_not_change, safety_net, steps, expected, actual, environment, evidence, impact, dependencies, rollback, reviewers."
+  ],
+  "mode": "advisory",
+  "ready_score": 80,
+  "ask_score": 50,
+  "model": {
+    "enabled": false,
+    "min_confidence": 0.7
+  },
+  "skip": {}
+}

@@ -1,0 +1,37 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # kit/shipped.sha256 and the upgrade tests read old versions from git history
+      # setup-python has no 3.8 for current Ubuntu runners; uv provides any version (the kit supports 3.8+)
+      - uses: astral-sh/setup-uv@v6
+      - name: Python ${{ matrix.python }}
+        run: |
+          uv python install ${{ matrix.python }}
+          mkdir -p "$HOME/bin"
+          ln -sf "$(uv python find ${{ matrix.python }})" "$HOME/bin/python"
+          ln -sf "$(uv python find ${{ matrix.python }})" "$HOME/bin/python3"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - run: python3 --version
+      - name: Configure git for test repos
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+      - name: Unit and integration tests
+        run: python -m unittest discover -s tests -v
+      - name: shipped.sha256 is current
+        run: |
+          python kit/kit_files.py shipped . > /tmp/shipped.sha256
+          diff -u kit/shipped.sha256 /tmp/shipped.sha256

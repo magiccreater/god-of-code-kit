@@ -4,12 +4,13 @@
 #                                        (works in Claude Code on the web / phone, and for teammates)
 #   ./install.sh <repo-path> --private   private mode: nothing is committed; all kit files are excluded
 #                                        locally via .git/info/exclude (for client/employer repos)
-# Safe to re-run: kit-owned files and marked kit blocks are upgraded; project knowledge in .ai/ is never overwritten.
+# Safe to re-run: kit-owned files and marked kit blocks are upgraded (kit files you edited are kept, with the
+# new version beside them as <file>.kit-new); project knowledge in .ai/ is never overwritten.
 set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T="$KIT/template"
-usage() { sed -n '2,7p' "$0"; exit 1; }
+usage() { sed -n '2,8p' "$0"; exit 1; }
 [ $# -ge 1 ] || usage
 [ -d "$1" ] || { echo "Not a directory: $1"; exit 1; }
 REPO="$(cd "$1" && pwd)"; shift
@@ -55,14 +56,9 @@ while IFS= read -r -d '' src; do
   fi
 done < <(find "$T/.ai" -type f -print0)
 
-# 2. Kit-owned files: always installed/upgraded.
+# 2. Kit-owned files: installed and upgraded, except ones you edited (kept; new version saved as <file>.kit-new).
 echo "Skills, agents, hooks (.claude/):"
-for d in skills agents god; do
-  while IFS= read -r -d '' src; do
-    dst="$REPO/${src#"$T"/}"
-    mkdir -p "$(dirname "$dst")"; cp "$src" "$dst"; say install "$(rel "$dst")"
-  done < <(find "$T/.claude/$d" -type f ! -path '*/__pycache__/*' -print0)
-done
+"$PY" "$KIT/kit/kit_files.py" install "$T" "$REPO"
 chmod +x "$REPO/.claude/god/"*.sh "$REPO/.claude/god/hooks/"*.sh "$REPO/.claude/god/hooks/"*.py \
          "$REPO/.claude/skills/refresh-skeleton/scripts/skeleton.py" 2>/dev/null || true
 
@@ -132,7 +128,7 @@ if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
              .claude/settings.local.json .claude/skills/refresh-skeleton/ .claude/skills/onboard-repo/ \
              .claude/skills/trace-flow/ .claude/skills/start-task/ .claude/skills/sync-brain/ \
              .claude/skills/write-lld/ .claude/skills/ops-docs/ .claude/skills/second-opinion/ \
-             .claude/skills/ready-gate/; do
+             .claude/skills/ready-gate/ .claude/skills/task-ready/ .claude/skills/converge/; do
       grep -qxF "$p" "$EX" || echo "$p" >> "$EX"
     done
     say exclude "$(rel "$EX") (kit files stay local, never committed)"
@@ -156,7 +152,8 @@ cat <<EOF
 Done. Next, in $REPO:
   1. Start Claude Code (check /model shows Opus 5.5) and run:  /onboard-repo
   2. Trace the main business flows:                           /trace-flow <flow>
-  3. Work on tasks with the full loop:                        /start-task <description>
+  3. Check a task has what it needs (why, AC, repro steps):  /task-ready <description>
+     Work on it with the full loop:                          /start-task <T-id>
   4. LLD / deploy + test docs when needed:                    /write-lld <module>   /ops-docs
   5. High-risk change? Cross-model review with Gemini:        /second-opinion current diff
 EOF

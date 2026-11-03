@@ -1,0 +1,38 @@
+# Every version of every kit-owned file the kit has shipped: '<sha256>  <path>'.
+# install.sh upgrades a file that still matches one of these; anything else counts as edited.
+# Regenerate with: python3 kit/kit_files.py shipped . > kit/shipped.sha256
+a978e78c1f80da95f86b7cc683d54afc6571aa250ce1e3b2c7f498db0c7d4f52  .claude/agents/code-reviewer.md
+089493fac21190dc6747de0ec0b87cb51ea8cef1367948e3f93127994e055167  .claude/agents/qa-skeptic.md
+7069b3ce53a768e7b4992660d85c9a8b37117d9ae7d02fa7dbb3f11afa0df31e  .claude/agents/qa-skeptic.md
+430f1e3de47f53460734531985aca6e774224c54e2a7cd7bbc5fb642768e8d39  .claude/god/decide/decision_gate.py
+9ddb55942722975ca955bc984257ca80b0b359f725dd916f4d58a3319ff077cb  .claude/god/decide/decision_gate.py
+1f7125609004c8f7bc043761527ae6b15161100b5d33f78b41b017c30d6f02f4  .claude/god/decide/readiness.py
+cecf2d1a970b0daf28d3d9242d5874d2b3abe77890a5988597692bf20bbd4e31  .claude/god/decide/vega_server.py
+516842bfcb28ff06ac6f90ff8ffdafe5d7c0a3c5bb5fcb9eaa82ce3451f71a53  .claude/god/hooks/pretool_guard.py
+59118e78c0148a90f4b360581f1ed2263689586bdffa5dd9d8f439a66d3fb556  .claude/god/hooks/pretool_guard.py
+ced48fa269d7b527699c8efc95bf4b45e4f9a36395b00f2e682bee1479267ed8  .claude/god/hooks/pretool_guard.py
+43512b3ca25ec06f029b59e54e49b9dbdda6a31b58ace02c1b90f58160e86235  .claude/god/hooks/pretool_guard.sh
+bf118255622a1589cafa1e801c5a6af7ccd0324cd8914347113e8d2178f652e7  .claude/god/hooks/qa_write_guard.sh
+b06cfffd10e879670141b01767b386084092a584ef2b43e7a721eabcf708418b  .claude/god/hooks/session_start.sh
+ebd1f6a75a0856ea43672e15b48b68cac6ffdda62fadfd88fe3dea6c63c8f55b  .claude/god/hooks/session_start.sh
+656cf2aa645063dec7c50255eb9b49a9c01b4c52053092e15b9e3f9d34048401  .claude/god/hooks/stop_check.sh
+00196a723dcb0e403333a948f67e6837dd635036dfe8258571f755c93eb3fe83  .claude/god/qa_worktree.sh
+54f683e45476801a2d8c256df774293e1609438dddde2b1673a611a37aec76af  .claude/skills/converge/SKILL.md
+3df04bc8b46bd1fc2e923c51d1df47e271863dd9bb4e86a2bdfa8a8fa5abdb46  .claude/skills/onboard-repo/SKILL.md
+0b7951da109a8f75fb9a91cf5f57663064e984beb75ab9d39435950e6f213125  .claude/skills/ops-docs/SKILL.md
+6b084f08ceb29452e7605be31a5cad8abc78e64f6e169676feb4da8662fe7e56  .claude/skills/ready-gate/SKILL.md
+c05fd802ca986aca152f9d294b8e0748c344ed0cbef43915ead1eea9492c71f1  .claude/skills/refresh-skeleton/SKILL.md
+f96c90e441add6561ae422fccb1689311f87dc41cc34ce6550776689a49f26eb  .claude/skills/refresh-skeleton/SKILL.md
+08b00a8cf11768c9eadd4bc89436720fe105e29db582118bb71335a2df863012  .claude/skills/refresh-skeleton/scripts/skeleton.py
+29cebbd11f5590d9fd607f71b58a81a44b316d93f9b4131b55f4aa2ac5509034  .claude/skills/refresh-skeleton/scripts/skeleton.py
+885b1c6e9346c322d4895547d033509407a6b4422b99fc4ff2ca1df3f759e584  .claude/skills/refresh-skeleton/scripts/skeleton.py
+e6d585b8ff3f58f2e57cc21aac199172c47d0b7d3e0577b6d6752b72928df6b2  .claude/skills/second-opinion/SKILL.md
+79d319fea74a3c6b7e70c5f2deb32058167cc972e65e01d056d2cd87acabb654  .claude/skills/start-task/SKILL.md
+ab43ce80f7955cfa7c87d01e55155fe440e9be7ee61b517149903879024922e4  .claude/skills/start-task/SKILL.md
+c7ff95ce3edff8eaf8c877a1023064bf9c5ba229800e9e34c8c5a6dec1b7e2bf  .claude/skills/start-task/SKILL.md
+cdf74a987639d31fad7e38397095ee098228f02f7b3a68f3730a8fe4bb1d0799  .claude/skills/start-task/SKILL.md
+129089dd68c22f58be863b8c412e0fef6df38e824d7f12a56152b064377345de  .claude/skills/sync-brain/SKILL.md
+cef18c1b35851cdfefea1768a71e5f3d3d921394e23e863a60daed2dafd766c3  .claude/skills/sync-brain/SKILL.md
+e7457f17c480e02dc2966c53b9ebbe7efd99c0e3c9c397498ce682998a10cee2  .claude/skills/task-ready/SKILL.md
+4742f5acc2c0a7d2716a76d57121f2135f0c8ee10e2af11b054d2e1828154cdf  .claude/skills/trace-flow/SKILL.md
+55151eea02d087a332121bc3ff55a8934f29e5e3281b53739a801cec3ade10ab  .claude/skills/write-lld/SKILL.md
