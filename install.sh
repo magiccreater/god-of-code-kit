@@ -150,6 +150,8 @@ fi
 cat <<EOF
 
 Done. Next, in $REPO:
+  WSL and Oracle: god doctor, then god task "your assignment"
+  With only this installed repo: bash .claude/god/run.sh task "your assignment"
   1. Start Claude Code (check /model shows Opus 5.5) and run:  /onboard-repo
   2. Trace the main business flows:                           /trace-flow <flow>
   3. Check a task has what it needs (why, AC, repro steps):  /task-ready <description>
