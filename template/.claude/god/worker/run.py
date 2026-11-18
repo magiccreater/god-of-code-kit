@@ -261,7 +261,7 @@ def run(args, root):
         git, tree = baseline(project, base / "baseline")
         relay_dir = base / "relay"
         relay_dir.mkdir()
-        server = Server(relay_dir / "socket", PORT, args.public, [s for s in lines("redact") if s])
+        server = Server(relay_dir / "socket", PORT, [s for s in lines("redact") if s])
         threading.Thread(target=server.serve_forever, daemon=True).start()
         try:
             brief = "Read .ai/rules.md when present. Task: " + args.brief
@@ -312,7 +312,6 @@ def main():
     for name in ("task", "review"):
         child = subs.add_parser(name)
         child.add_argument("brief")
-        child.add_argument("--public", action="store_true", help="permit the VM's configured public provider for this run")
         if name == "task":
             child.add_argument("--parallel", action="store_true", help="research and design concurrently before implementing")
             child.add_argument("--single", action="store_true", help="skip the planning call and use one coding worker")

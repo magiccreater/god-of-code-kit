@@ -87,8 +87,6 @@ class Relay(BaseHTTPRequestHandler):
         connection = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=300)
         try:
             headers = {"Content-Type": "application/json"}
-            if self.server.public:
-                headers["X-Public-Project"] = "yes"
             connection.request("POST", self.path, data, headers)
             response = connection.getresponse()
             self.send_response(response.status)
@@ -106,8 +104,7 @@ class Relay(BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
-    def __init__(self, path, port, public=False, literals=()):
+    def __init__(self, path, port, literals=()):
         self.port = port
-        self.public = public
         self.sanitizer = Sanitizer(literals)
         super().__init__(str(path), Relay)

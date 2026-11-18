@@ -103,7 +103,7 @@ class EndToEnd(unittest.TestCase):
                 from argparse import Namespace
                 state = Path(tmp) / "state"
                 with patch.object(run, "STATE", state), patch.object(run, "PORT", api.server_port):
-                    run.run(Namespace(action="task", brief="test for sam@example.com", public=False, parallel=False, single=True), root)
+                    run.run(Namespace(action="task", brief="test for sam@example.com", parallel=False, single=True), root)
                     diff = next(state.glob("*/changes.patch"))
                     self.assertIn(b"+verified", diff.read_bytes())
                     subprocess.run(["git", "-C", root, "apply", diff], check=True)

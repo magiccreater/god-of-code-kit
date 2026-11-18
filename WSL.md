@@ -36,10 +36,10 @@ An initialized shared repository also carries its own launcher. From that projec
 | Missing project files | The snapshot includes current contents of Git-tracked regular files and local kit Markdown. Stage new files that the agent should see. Symlinks and excluded paths are skipped. Review the generated patch and test results before applying. |
 | Request blocked | Keep attachments, encoded blobs and private keys out of the task. Add project-specific literals or paths to the local exclusions below. |
 
-## Privacy and optional escalation
+## Privacy and inference cost
 
 Every worker runs inside a WSL Docker container with no external network, host credentials or Docker socket. It accesses inference through a Unix socket to the WSL sanitizer. Reviews mount the checkout read-only. The Codex CLI uses the Oracle Responses endpoint for both coding and review. An Oracle-only reviewer shares the coding model; it provides a fresh context.
 
-Add one literal identifier per line to `~/.config/god-kit/redact` and one repo-relative glob per line to `~/.config/god-kit/exclude`. The sanitizer also handles known credential patterns and email addresses on prompts and tool outputs. Free-form confidential facts, unfamiliar credential formats and business logic can survive pattern redaction. Keep private tasks on the default Oracle route. Local reports may contain project information.
+Add one literal identifier per line to `~/.config/god-kit/redact` and one repo-relative glob per line to `~/.config/god-kit/exclude`. The sanitizer also handles known credential patterns and email addresses on prompts and tool outputs. Free-form confidential facts, unfamiliar credential formats and business logic can survive pattern redaction. Local reports may contain project information.
 
-External escalation requires all three values in a root-readable `/etc/god-router.env` on the VM: PUBLIC_OPENAI_KEY, PUBLIC_OPENAI_MODEL and PUBLIC_CALLS_PER_DAY. Restart god-router after changing them. A worker invocation must also specify `--public`. Only use this flag with material approved for external processing. The local decision model can select the configured external model on a difficult turn. Daily call reservations persist in SQLite. The limit counts calls, not dollars. A failed external attempt consumes its reservation. No external provider is configured at installation.
+The Oracle worker profile sends every inference request to the model on the VM. Cloud provisioning checks the active subscription and home region before planning. It stops if it cannot confirm the free subscription. Capacity and free allowances are controlled by Oracle.
