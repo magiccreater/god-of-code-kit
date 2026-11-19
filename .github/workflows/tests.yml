@@ -35,3 +35,13 @@ jobs:
         run: |
           python kit/kit_files.py shipped . > /tmp/shipped.sha256
           diff -u kit/shipped.sha256 /tmp/shipped.sha256
+  rust-preview:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust/god-kit-preview
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo +stable fmt --check
+      - run: cargo +stable test --offline --locked
+      - run: cargo +stable build --offline --locked --release

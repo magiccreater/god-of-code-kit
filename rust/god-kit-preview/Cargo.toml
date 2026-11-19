@@ -1,0 +1,7 @@
+[package]
+name = "god-kit-preview"
+version = "0.1.0"
+edition = "2021"
+description = "Opt-in Rust launcher preview for God of Code Kit in WSL"
+repository = "https://github.com/magiccreater/god-of-code-kit"
+publish = false
