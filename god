@@ -11,11 +11,11 @@ case "${1:-help}" in
           [[ -f "$file" ]] || { echo "Install both repos side by side or set GOD_ORACLE_PROFILE to the profile directory."; exit 1; }
           bash "$file" "$@";;
   task|review|apply|doctor|status)
-        if [[ "$1" =~ ^(task|review)$ ]]; then
+        if [[ "$1" =~ ^(task|review)$ && "${2:-}" != --help && "${2:-}" != -h ]]; then
           root=$(git rev-parse --show-toplevel) || { echo "Open a Git repository first."; exit 1; }
           python3 "$kit/template/.claude/god/worker/linux_workspace.py" "$root"
           if [[ ! -f "$root/.ai/rules.md" ]]; then bash "$kit/install.sh" "$root" --private; fi
         fi
         exec python3 "$kit/template/.claude/god/worker/run.py" "$@";;
-  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | task "brief" [--single|--parallel] | review "scope" | apply RUN_ID';;
+  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | task "brief" [--single|--parallel] [--public-openrouter] | review "scope" [--public-openrouter] | apply RUN_ID';;
 esac

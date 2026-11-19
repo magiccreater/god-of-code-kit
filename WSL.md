@@ -15,6 +15,29 @@ The first task or review installs the kit in private mode if needed. For a share
 
 The default task asks the Oracle model whether two independent units can own disjoint files. A malformed or overlapping plan uses one developer. Each unit gets its own checkout. A final integrator sees their combined edits and is instructed to run the project's tests. `--single` skips planning for small jobs. `--parallel` also asks two read-only workers to research and design concurrently. On the free VM, model requests can queue behind each other while WSL tools run concurrently.
 
+## Sydney AWS coding gateway
+
+The [Limpid gateway profile](https://github.com/magiccreater/limpid-ai-dev-stack/tree/main/dev-stack-template/aws/chat-gateway) provides a Sydney CloudFormation stack and a `BaseUrl` output. Deploy it from an active AWS Free Plan project. Use `aws login` to keep temporary credentials in WSL.
+
+```bash
+aws login --profile god-of-code-kit --region ap-southeast-2
+export GOD_AWS_PROFILE=god-of-code-kit
+god doctor
+cd ~/code/your-project
+god task "Add a test for an empty invoice list" --single
+god review "Review the current diff"
+```
+
+`GOD_AWS_STACK` selects a stack other than `limpid-chat-gateway`. The relay discovers the stack endpoint, signs requests from WSL, and translates Codex Responses messages into Chat Completions. Codex receives streamed answers and local shell tool calls via its existing per-run socket. The worker has no AWS credentials or network access of its own.
+
+AWS requests select `private-coder` by default. When every part of the run, including files and tool output it might send, is public or synthetic, use `--public-openrouter` for a task or review. That selects `private-coder-public`. The Sydney stack must have an OpenRouter SecureString configured for this route to use `free-auto` when Bedrock is unavailable.
+
+```bash
+god task "Add a test to this public sample" --single --public-openrouter
+```
+
+Secure the WSL profile and choose the repository and route before starting a run. Private coding requires positive Sydney Bedrock quota. The relay refuses paid or expired AWS plans and rejects unsupported attachments and requests above the gateway's 64 KiB input limit. Unset `GOD_AWS_PROFILE` to return to the Oracle tunnel.
+
 ## Oracle setup
 
 An initialized shared repository also carries its own launcher. From that project, `bash .claude/god/run.sh task "your assignment"` uses the installed worker and the existing WSL tunnel. Run `god status` to locate recent reports and patches.
@@ -53,7 +76,7 @@ unset webhook
 
 ## Privacy and inference cost
 
-Every worker runs inside a WSL Docker container with no external network, host credentials or Docker socket. It accesses inference through a Unix socket to the WSL sanitizer. Reviews mount the checkout read-only. The Codex CLI uses the Oracle Responses endpoint for both coding and review. An Oracle-only reviewer shares the coding model; it provides a fresh context.
+Every worker runs inside a WSL Docker container with no external network, host credentials or Docker socket. It accesses inference through a Unix socket to the WSL sanitizer. Reviews mount the checkout read-only. Coding and review both use the selected backend. The reviewer starts with a fresh model context.
 
 Add one literal identifier per line to `~/.config/god-kit/redact` and one repo-relative glob per line to `~/.config/god-kit/exclude`. The sanitizer also handles known credential patterns and email addresses on prompts and tool outputs. Free-form confidential facts, unfamiliar credential formats and business logic can survive pattern redaction. Local reports may contain project information.
 

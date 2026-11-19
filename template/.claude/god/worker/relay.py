@@ -8,6 +8,8 @@ import secrets
 import socketserver
 from http.server import BaseHTTPRequestHandler
 
+from aws_gateway import GatewayError
+
 PATTERNS = [
     re.compile(r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/=-]{6,}"),
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\b(?:gh[pousr]_|github_pat_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}"),
@@ -73,6 +75,8 @@ class Relay(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError()
             if "tools" in body:
+                if not isinstance(body["tools"], list) or not all(isinstance(tool, dict) for tool in body["tools"]):
+                    raise ValueError("invalid tools")
                 enabled = {"exec_command", "shell_command", "shell", "write_stdin"}
                 body["tools"] = [tool for tool in body["tools"] if tool.get("type") == "function"
                                  and tool.get("name") in enabled]
@@ -81,9 +85,12 @@ class Relay(BaseHTTPRequestHandler):
                 raise ValueError("opaque history")
             body = {k: v for k, v in body.items() if k in {
                 "input", "instructions", "tools", "model", "stream", "max_output_tokens", "text"}}
-            data = json.dumps(self.server.sanitizer.clean(body)).encode()
+            cleaned = self.server.sanitizer.clean(body)
         except (ValueError, TypeError, RecursionError):
             return self.send_error(422, "WSL blocked unsupported content or key material")
+        if self.server.aws_gateway:
+            return self.relay_aws(cleaned)
+        data = json.dumps(cleaned).encode()
         connection = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=300)
         try:
             headers = {"Content-Type": "application/json"}
@@ -101,10 +108,43 @@ class Relay(BaseHTTPRequestHandler):
             connection.close()
 
 
+    def relay_aws(self, body):
+        gateway = self.server.aws_gateway
+        started = False
+        try:
+            if not body.get("stream"):
+                data = json.dumps(gateway.complete(body)).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                started = True
+                self.wfile.write(data)
+                return
+            with gateway.open(body) as response:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                route = response.getheader("X-Limpid-Route")
+                if route in ("bedrock", "free-auto"):
+                    self.send_header("X-Limpid-Route", route)
+                self.end_headers()
+                started = True
+                for event in gateway.events(response):
+                    self.wfile.write(event)
+                    self.wfile.flush()
+        except GatewayError as error:
+            if not started:
+                self.send_error(error.status, str(error))
+        except (AttributeError, KeyError, OSError, TypeError, ValueError, http.client.HTTPException):
+            if not started:
+                self.send_error(502, "AWS gateway response was unavailable")
+
+
 class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
-    def __init__(self, path, port, literals=()):
+    def __init__(self, path, port, literals=(), aws_gateway=None):
+        self.aws_gateway = aws_gateway
         self.port = port
         self.sanitizer = Sanitizer(literals)
         super().__init__(str(path), Relay)
