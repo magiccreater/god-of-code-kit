@@ -1,6 +1,6 @@
 # God of Code kit
 
-For Oracle-hosted inference, WSL-isolated coding and Codex review, see the [WSL quick start](WSL.md). After setup, run `god task "your change" --single` from a target Git repository. See the [kit task board](.ai/tasks.md) for completed work and the next coding milestones.
+For WSL-isolated coding and Codex review through AWS or Oracle, see the [WSL quick start](WSL.md). After setup, run `god task "your change" --single` from a target Git repository. See the [kit task board](.ai/tasks.md) for completed work and the next coding milestones.
 
 A per-repo setup that turns **Claude Code (Opus 5.5)** + **Antigravity CLI (Gemini Pro)** into one disciplined coding system:
 understands new repos, traces business logic, writes and changes code test-first, keeps a living project brain

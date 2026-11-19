@@ -14,6 +14,7 @@ import tempfile
 import threading
 import uuid
 
+from aws_gateway import AwsGateway
 from linux_workspace import require_linux_workspace
 from notifications import notify, slack_path
 from relay import Sanitizer, Server
@@ -58,7 +59,32 @@ def health():
         connection.close()
 
 
+def docker_ready():
+    return shutil.which("docker") and subprocess.run(
+        ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def print_slack_status():
+    try:
+        slack = "configured" if slack_path(CONFIG) else "disabled"
+    except (OSError, ValueError):
+        slack = "invalid (see Slack notifications in WSL.md)"
+    print("Slack notifications:", slack)
+
+
 def doctor():
+    if aws_profile := os.getenv("GOD_AWS_PROFILE"):
+        docker = docker_ready()
+        print("Docker:", "ready" if docker else "unavailable (start Docker inside WSL)")
+        print_slack_status()
+        try:
+            AwsGateway.discover(aws_profile)
+        except ValueError as error:
+            print("AWS gateway:", error)
+            return 1
+        print("AWS gateway: Sydney stack and temporary credentials found")
+        return 0 if docker else 1
     profile = Path.home() / ".oci/config"
     print("OCI CLI:", shutil.which("oci") or "missing (uv tool install oci-cli --python 3.12)")
     print("OCI credentials:", "configured" if profile.exists() else "missing (god oracle auth)")
@@ -82,15 +108,10 @@ def doctor():
             print("OCI authentication: timed out contacting OCI. Check networking and the configured region.")
         except configparser.Error:
             print("OCI profile: malformed INI. Compare ~/.oci/config with the key's configuration preview.")
-    docker = shutil.which("docker") and subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL,
-                                                        stderr=subprocess.DEVNULL).returncode == 0
+    docker = docker_ready()
     print("Docker:", "ready" if docker else "unavailable (start Docker inside WSL)")
     print("Worker:", "ready" if docker and image_ready() else "built automatically on the first task")
-    try:
-        slack = "configured" if slack_path(CONFIG) else "disabled"
-    except (OSError, ValueError):
-        slack = "invalid (see Slack notifications in WSL.md)"
-    print("Slack notifications:", slack)
+    print_slack_status()
     ok = health()
     state = Path.home() / ".local/state/god-oracle"
     if ok:
@@ -145,6 +166,7 @@ def pending_diff(root, paths):
 
 
 def worker(project, socket_dir, prompt, review=False):
+    model = "aws-coder" if os.getenv("GOD_AWS_PROFILE") else "oci-local"
     with tempfile.TemporaryDirectory(dir=STATE) as out:
         args = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "2g",
@@ -154,18 +176,18 @@ def worker(project, socket_dir, prompt, review=False):
                 "-v", f"{out}:/result:rw", "-i", IMAGE, "sh", "-ec",
                 'mkdir -p "$HOME"; python3 /opt/god/bridge.py & '
                 'exec codex exec --ephemeral --skip-git-repo-check --ignore-user-config '
-                '-c model_provider=\'"oci"\' -c model_providers.oci.name=\'"Oracle"\' '
-                '-c model_providers.oci.base_url=\'"http://127.0.0.1:8183/v1"\' '
-                '-c model_providers.oci.wire_api=\'"responses"\' '
-                '-c model_providers.oci.supports_websockets=false -c model_providers.oci.request_max_retries=0 '
-                '-c model_providers.oci.stream_max_retries=0 -c model_context_window=24576 '
-                '-m oci-local --sandbox danger-full-access -o /result/message -']
+                '-c model_provider=\'"relay"\' -c model_providers.relay.name=\'"WSL Relay"\' '
+                '-c model_providers.relay.base_url=\'"http://127.0.0.1:8183/v1"\' '
+                '-c model_providers.relay.wire_api=\'"responses"\' '
+                '-c model_providers.relay.supports_websockets=false -c model_providers.relay.request_max_retries=0 '
+                '-c model_providers.relay.stream_max_retries=0 -c model_context_window=24576 '
+                f'-m {model} --sandbox danger-full-access -o /result/message -']
         # The outer container enforces read-only review, offline execution and mount boundaries.
         cmd(*args, input=prompt.encode())
         return (Path(out) / "message").read_text()
 
 
-def task_plan(project, brief):
+def task_plan(project, brief, aws_gateway=None):
     """Only independent, explicitly scoped units may run concurrently."""
     files = [str(p.relative_to(project)) for p in sorted(project.rglob("*"))
              if p.is_file() and not str(p.relative_to(project)).startswith(".")][:180]
@@ -175,14 +197,17 @@ def task_plan(project, brief):
                "interface, return exactly two units, each with brief and files (exact relative paths, "
                "including tests). Shared files or dependencies require a single worker.",
                "input": json.dumps({"task": brief, "paths": files})}
-    connection = http.client.HTTPConnection("127.0.0.1", PORT, timeout=150)
+    connection = None if aws_gateway else http.client.HTTPConnection("127.0.0.1", PORT, timeout=150)
     try:
         cleaned = Sanitizer([v for v in lines("redact") if v]).clean(request)
-        connection.request("POST", "/v1/responses", json.dumps(cleaned), {"Content-Type": "application/json"})
-        response = connection.getresponse()
-        if response.status != 200:
-            return []
-        output = json.load(response)["output"]
+        if aws_gateway:
+            output = aws_gateway.complete(cleaned)["output"]
+        else:
+            connection.request("POST", "/v1/responses", json.dumps(cleaned), {"Content-Type": "application/json"})
+            response = connection.getresponse()
+            if response.status != 200:
+                return []
+            output = json.load(response)["output"]
         content = "".join(part["text"] for item in output for part in item.get("content", [])
                           if part.get("type") == "output_text").strip()
         units = json.loads(content)["units"]
@@ -190,7 +215,8 @@ def task_plan(project, brief):
     except (ValueError, OSError, KeyError, AttributeError, TypeError, http.client.HTTPException):
         return []
     finally:
-        connection.close()
+        if connection:
+            connection.close()
 
 
 def validate_units(units):
@@ -258,7 +284,12 @@ def run(args, root):
 
 
 def execute(args, root, record):
-    if not health():
+    aws_profile = os.getenv("GOD_AWS_PROFILE")
+    public = getattr(args, "public_openrouter", False)
+    if public and not aws_profile:
+        raise ValueError("--public-openrouter requires GOD_AWS_PROFILE.")
+    aws_gateway = AwsGateway.discover(aws_profile, public=public) if aws_profile else None
+    if not aws_gateway and not health():
         profile = Path(os.getenv("GOD_ORACLE_PROFILE", str(HERE.parents[4] /
                        "limpid-ai-dev-stack/dev-stack-template/oracle/profile"))) / "oracle.sh"
         if (Path.home() / ".local/state/god-oracle/ip").is_file() and profile.is_file():
@@ -277,7 +308,7 @@ def execute(args, root, record):
         git, tree = baseline(project, base / "baseline")
         relay_dir = base / "relay"
         relay_dir.mkdir()
-        server = Server(relay_dir / "socket", PORT, [s for s in lines("redact") if s])
+        server = Server(relay_dir / "socket", PORT, [s for s in lines("redact") if s], aws_gateway)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         try:
             brief = "Read .ai/rules.md when present. Task: " + args.brief
@@ -288,7 +319,7 @@ def execute(args, root, record):
                     result = worker(project, relay_dir, "Give a read-only second opinion with file references. "
                                     "The pending tracked diff is in " + Path(pending.name).name + ". " + brief, True)
             else:
-                units = [] if args.single else task_plan(project, args.brief)
+                units = [] if args.single else task_plan(project, args.brief, aws_gateway)
                 (record / "plan.json").write_text(json.dumps(units, indent=2))
                 if args.parallel or units:
                     roles = ["Research relevant implementation and dependencies.", "Design the change and its tests."]
@@ -325,6 +356,8 @@ def main():
     for name in ("task", "review"):
         child = subs.add_parser(name)
         child.add_argument("brief")
+        child.add_argument("--public-openrouter", action="store_true",
+                           help="permit the AWS fallback for public or synthetic inputs")
         if name == "task":
             child.add_argument("--parallel", action="store_true", help="research and design concurrently before implementing")
             child.add_argument("--single", action="store_true", help="skip the planning call and use one coding worker")
