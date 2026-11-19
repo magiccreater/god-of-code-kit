@@ -16,7 +16,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "template/.claude/god/worker"))
 from aws_gateway import AwsGateway, GatewayError, sign_headers
-from chat_responses import chat_request, response_events
+from chat_responses import chat_request, function_item, response_events
 import run
 
 URL = "https://test123.execute-api.ap-southeast-2.amazonaws.com/pilot/v1"
@@ -86,6 +86,25 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(request["model"], "private-coder")
         self.assertEqual([message["role"] for message in request["messages"]], ["system", "assistant", "tool", "tool"])
         self.assertEqual([call["id"] for call in request["messages"][1]["tool_calls"]], ["a", "b"])
+
+    def test_offline_tool_schema_exposes_only_default_sandbox_fields(self):
+        parameters = {"type": "object", "properties": {
+            "cmd": {"type": "string"}, "justification": {"type": "string"},
+            "sandbox_permissions": {"type": "string"}, "prefix_rule": {"type": "array"},
+        }, "required": ["cmd", "justification"]}
+        request = chat_request({"input": "test", "tools": [
+            {"type": "function", "name": "exec_command", "parameters": parameters},
+        ]}, "private-coder-public")
+        function = request["tools"][0]["function"]
+        self.assertEqual(set(function["parameters"]["properties"]), {"cmd"})
+        self.assertEqual(function["parameters"]["required"], ["cmd"])
+        self.assertIn("justification", parameters["properties"])
+
+    def test_shell_calls_strip_rationale_for_default_calls_but_keep_explicit_escalation(self):
+        arguments = '{"cmd":"true","justification":"verify output"}'
+        self.assertEqual(function_item("one", "exec_command", arguments)["arguments"], '{"cmd":"true"}')
+        escalation = '{"cmd":"true","sandbox_permissions":"require_escalated","justification":"ask"}'
+        self.assertEqual(function_item("two", "exec_command", escalation)["arguments"], escalation)
 
     def test_truncated_stream_does_not_release_a_tool_call(self):
         content = data_event({"tool_calls": [{"index": 0, "id": "a", "function": {"name": "status", "arguments": "{}"}}]})

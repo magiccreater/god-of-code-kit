@@ -5,6 +5,9 @@ import time
 import uuid
 
 
+SHELL_TOOLS = {"exec_command", "shell_command", "shell"}
+APPROVAL_FIELDS = {"sandbox_permissions", "justification", "prefix_rule"}
+
 def text_content(content):
     if isinstance(content, str):
         return content
@@ -13,6 +16,24 @@ def text_content(content):
             and isinstance(part.get("text"), str) for part in content):
         return "\n".join(part["text"] for part in content)
     raise ValueError("Unsupported text content")
+
+
+def chat_tool(tool):
+    function = {key: tool[key] for key in ("name", "description", "parameters", "strict") if key in tool}
+    parameters = function.get("parameters")
+    if function.get("name") in SHELL_TOOLS and isinstance(parameters, dict):
+        properties = parameters.get("properties", {})
+        if isinstance(properties, dict):
+            function["parameters"] = {
+                **parameters,
+                "properties": {name: prop for name, prop in properties.items() if name not in APPROVAL_FIELDS},
+            }
+            if isinstance(parameters.get("required"), list):
+                function["parameters"]["required"] = [
+                    name for name in parameters["required"] if name not in APPROVAL_FIELDS
+                ]
+        function["description"] = "Run a shell command inside the offline WSL worker with its default permissions."
+    return {"type": "function", "function": function}
 
 
 def chat_request(body, model):
@@ -58,12 +79,7 @@ def chat_request(body, model):
     if "max_output_tokens" in body:
         request["max_tokens"] = body["max_output_tokens"]
     if body.get("tools"):
-        request["tools"] = [
-            {"type": "function", "function": {key: tool[key] for key in (
-                "name", "description", "parameters", "strict"
-            ) if key in tool}}
-            for tool in body["tools"]
-        ]
+        request["tools"] = [chat_tool(tool) for tool in body["tools"]]
     return request
 
 
@@ -80,9 +96,17 @@ def message_item(text, item_id=None, status="completed"):
 
 
 def function_item(call_id, name, arguments):
-    if (not all(isinstance(value, str) and value for value in (call_id, name, arguments))
-            or not isinstance(json.loads(arguments), dict)):
+    if not all(isinstance(value, str) and value for value in (call_id, name, arguments)):
         raise ValueError("Incomplete function call")
+    parsed = json.loads(arguments)
+    if not isinstance(parsed, dict):
+        raise ValueError("Invalid function arguments")
+    if (name in SHELL_TOOLS and parsed.get("sandbox_permissions") in (None, "use_default")
+            and APPROVAL_FIELDS.intersection(parsed)):
+        # Drop irrelevant rationale for default sandbox calls. Preserve explicit requests
+        # for escalated permissions so the worker's approval policy can deny them.
+        arguments = json.dumps({key: value for key, value in parsed.items()
+                                if key not in APPROVAL_FIELDS}, separators=(",", ":"))
     return {"type": "function_call", "id": "fc_" + uuid.uuid4().hex, "status": "completed",
             "call_id": call_id, "name": name, "arguments": arguments}
 

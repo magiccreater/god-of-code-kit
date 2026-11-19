@@ -9,6 +9,7 @@ import socketserver
 from http.server import BaseHTTPRequestHandler
 
 from aws_gateway import GatewayError
+from chat_responses import SHELL_TOOLS
 
 PATTERNS = [
     re.compile(r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/=-]{6,}"),
@@ -77,7 +78,7 @@ class Relay(BaseHTTPRequestHandler):
             if "tools" in body:
                 if not isinstance(body["tools"], list) or not all(isinstance(tool, dict) for tool in body["tools"]):
                     raise ValueError("invalid tools")
-                enabled = {"exec_command", "shell_command", "shell", "write_stdin"}
+                enabled = SHELL_TOOLS | {"write_stdin"}
                 body["tools"] = [tool for tool in body["tools"] if tool.get("type") == "function"
                                  and tool.get("name") in enabled]
             # Forward only fields required for stateless text/tool turns.

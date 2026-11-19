@@ -6,7 +6,7 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Blocked
 
-- [ ] T-005 · Connect the personal IDE to a Sydney AWS inference gateway · limpid-ai-dev-stack and god-of-code-kit · since 2026-11-19 · [Infrastructure PR #6](https://github.com/magiccreater/limpid-ai-dev-stack/pull/6) validated the template and passed mocked tool streaming. Live Bedrock is blocked by zero applied Sydney requests and tokens per minute. [OpenRouter fallback PR #7](https://github.com/magiccreater/limpid-ai-dev-stack/pull/7) adds an opt-in public route and passed a direct synthetic tool-call stream at zero cost. The Sydney deployment still needs a SecureString key parameter. The WSL bridge passed a Codex edit, streamed tool call, local test, patch application, and redaction against a mock gateway. Live validation needs an active WSL login and a deployed Sydney gateway.
+- [ ] T-012 · Enable and verify private Bedrock coding in Sydney · limpid-ai-dev-stack · since 2026-11-20 · The project has zero applied Qwen3 Coder Next requests and tokens per minute. Recheck the quota before running the private route.
 - [ ] T-009 · Launch the Always Free Oracle inference VM in Sydney · limpid-ai-dev-stack · since 2026-11-19 · A1 host capacity was unavailable on the last check. Keep any retry within the free allocation.
 
 ## Todo
@@ -20,6 +20,7 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Done
 
+- [x] T-005 · Connect the personal WSL Codex worker to the Sydney gateway · limpid-ai-dev-stack and god-of-code-kit · Live public free-auto proved IAM-authenticated streaming, a shell tool call, a local edit and check, and clean patch application. [Gateway](https://github.com/magiccreater/limpid-ai-dev-stack/pull/7) and [WSL bridge](https://github.com/magiccreater/god-of-code-kit/pull/6).
 - [x] T-001 · Ship the per-repo task board, readiness checks, and review rules · template/.ai and template/.claude · verified by the kit tests and [PR #1](https://github.com/magiccreater/god-of-code-kit/pull/1).
 - [x] T-002 · Isolate Codex workers and sanitize inference requests from WSL · WSL supervisor · synthetic inference smoke test verified a tool call, redaction, a patch, and clean application. [PR #2](https://github.com/magiccreater/god-of-code-kit/pull/2).
 - [x] T-003 · Validate AWS-hosted inference in Sydney · disposable EC2 test · WSL received a live response through the gateway. The VM, security group, and storage were cleaned up. The AWS Free Plan project has a monthly usage-monitoring budget.
