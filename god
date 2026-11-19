@@ -6,7 +6,8 @@ case "${1:-help}" in
   init) shift; repo="${1:-.}"; if [[ $# -gt 0 ]]; then shift; fi
         python3 "$kit/template/.claude/god/worker/linux_workspace.py" "$repo"
         bash "$kit/install.sh" "$repo" "$@";;
-  self-test) GOD_DOCKER_TEST=1 python3 -m unittest discover -s "$kit/tests" -p test_wsl_worker.py -v;;
+  self-test) PYTHONPATH="$kit/tests${PYTHONPATH:+:$PYTHONPATH}" GOD_DOCKER_TEST=1 \
+             python3 -m unittest -v test_wsl_worker test_aws_gateway;;
   oracle) shift; file="${GOD_ORACLE_PROFILE:-$kit/../limpid-ai-dev-stack/dev-stack-template/oracle/profile}/oracle.sh"
           [[ -f "$file" ]] || { echo "Install both repos side by side or set GOD_ORACLE_PROFILE to the profile directory."; exit 1; }
           bash "$file" "$@";;

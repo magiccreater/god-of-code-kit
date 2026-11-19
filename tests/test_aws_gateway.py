@@ -16,7 +16,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "template/.claude/god/worker"))
 from aws_gateway import AwsGateway, GatewayError, sign_headers
-from chat_responses import chat_request, function_item, response_events
+from chat_responses import chat_request, response_events
 import run
 
 URL = "https://test123.execute-api.ap-southeast-2.amazonaws.com/pilot/v1"
@@ -87,25 +87,6 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual([message["role"] for message in request["messages"]], ["system", "assistant", "tool", "tool"])
         self.assertEqual([call["id"] for call in request["messages"][1]["tool_calls"]], ["a", "b"])
 
-    def test_offline_tool_schema_exposes_only_default_sandbox_fields(self):
-        parameters = {"type": "object", "properties": {
-            "cmd": {"type": "string"}, "justification": {"type": "string"},
-            "sandbox_permissions": {"type": "string"}, "prefix_rule": {"type": "array"},
-        }, "required": ["cmd", "justification"]}
-        request = chat_request({"input": "test", "tools": [
-            {"type": "function", "name": "exec_command", "parameters": parameters},
-        ]}, "private-coder-public")
-        function = request["tools"][0]["function"]
-        self.assertEqual(set(function["parameters"]["properties"]), {"cmd"})
-        self.assertEqual(function["parameters"]["required"], ["cmd"])
-        self.assertIn("justification", parameters["properties"])
-
-    def test_shell_calls_strip_rationale_for_default_calls_but_keep_explicit_escalation(self):
-        arguments = '{"cmd":"true","justification":"verify output"}'
-        self.assertEqual(function_item("one", "exec_command", arguments)["arguments"], '{"cmd":"true"}')
-        escalation = '{"cmd":"true","sandbox_permissions":"require_escalated","justification":"ask"}'
-        self.assertEqual(function_item("two", "exec_command", escalation)["arguments"], escalation)
-
     def test_truncated_stream_does_not_release_a_tool_call(self):
         content = data_event({"tool_calls": [{"index": 0, "id": "a", "function": {"name": "status", "arguments": "{}"}}]})
         response = b"".join(response_events(io.BytesIO(content), "private-coder"))
@@ -122,8 +103,8 @@ class GatewayTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.getenv("GOD_DOCKER_TEST") == "1", "requires WSL and the worker image")
-class CodexChatBridge(unittest.TestCase):
-    def test_codex_edits_and_verifies_a_file_through_mock_aws(self):
+class WorkerChatBridge(unittest.TestCase):
+    def test_worker_edits_and_verifies_a_file_through_mock_aws(self):
         requests = []
         signatures = []
 
@@ -140,14 +121,11 @@ class CodexChatBridge(unittest.TestCase):
                 self.send_header("X-Limpid-Route", "free-auto")
                 self.end_headers()
                 if len(requests) == 1:
-                    tool = next(tool["function"]["name"] for tool in body["tools"]
-                                if tool["function"]["name"] in ("exec_command", "shell_command"))
-                    key = "cmd" if tool == "exec_command" else "command"
                     command = 'echo verified > result.txt && test "$(cat result.txt)" = verified && echo sam@example.com'
-                    args = json.dumps({key: command})
+                    args = json.dumps({"cmd": command})
                     self.wfile.write(data_event({
                         "tool_calls": [{"index": 0, "id": "call_local", "type": "function",
-                                        "function": {"name": tool, "arguments": args[:20]}}],
+                                        "function": {"name": "exec_command", "arguments": args[:20]}}],
                     }))
                     self.wfile.write(data_event({
                         "tool_calls": [{"index": 0, "function": {"arguments": args[20:]}}],
@@ -186,10 +164,14 @@ class CodexChatBridge(unittest.TestCase):
                 subprocess.run(["git", "-C", repo, "apply", diff], check=True)
                 self.assertEqual((repo / "result.txt").read_text(), "verified\n")
                 self.assertEqual(len(requests), 2)
+                tool = requests[0]["tools"][0]["function"]
+                self.assertEqual(tool["name"], "exec_command")
+                self.assertEqual(set(tool["parameters"]["properties"]), {"cmd"})
                 self.assertTrue(all(request["model"] == "private-coder-public" for request in requests))
                 self.assertTrue(all(signature and "/execute-api/aws4_request" in signature for signature in signatures))
                 outputs = [message for message in requests[1]["messages"] if message["role"] == "tool"]
                 self.assertEqual(outputs[0]["tool_call_id"], "call_local")
+                self.assertIn("Exit code: 0", outputs[0]["content"])
                 self.assertIn("REDACTED_", outputs[0]["content"])
                 self.assertNotIn("sam@example.com", json.dumps(requests))
         finally:

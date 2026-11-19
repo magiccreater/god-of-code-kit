@@ -20,7 +20,7 @@ from notifications import notify, slack_path
 from relay import Sanitizer, Server
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_IMAGE = "god-kit-worker:0.170.0"
+DEFAULT_IMAGE = "god-kit-worker:1.0.0"
 IMAGE = os.getenv("GOD_WORKER_IMAGE", DEFAULT_IMAGE)
 STATE = Path.home() / ".local/state/god-kit"
 CONFIG = Path.home() / ".config/god-kit"
@@ -167,24 +167,18 @@ def pending_diff(root, paths):
 
 def worker(project, socket_dir, prompt, review=False):
     model = "aws-coder" if os.getenv("GOD_AWS_PROFILE") else "oci-local"
-    with tempfile.TemporaryDirectory(dir=STATE) as out:
-        args = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
-                "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "2g",
-                "--cpus", "2", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
-                "--tmpfs", "/tmp:rw,nosuid,nodev,mode=1777", "-e", "HOME=/tmp/agent", "-w", "/project",
-                "-v", f"{project}:/project:{'ro' if review else 'rw'}", "-v", f"{socket_dir}:/relay:ro",
-                "-v", f"{out}:/result:rw", "-i", IMAGE, "sh", "-ec",
-                'mkdir -p "$HOME"; python3 /opt/god/bridge.py & '
-                'exec codex exec --ephemeral --skip-git-repo-check --ignore-user-config '
-                '-c model_provider=\'"relay"\' -c model_providers.relay.name=\'"WSL Relay"\' '
-                '-c model_providers.relay.base_url=\'"http://127.0.0.1:8183/v1"\' '
-                '-c model_providers.relay.wire_api=\'"responses"\' '
-                '-c model_providers.relay.supports_websockets=false -c model_providers.relay.request_max_retries=0 '
-                '-c model_providers.relay.stream_max_retries=0 -c model_context_window=24576 '
-                f'-m {model} --sandbox danger-full-access -o /result/message -']
-        # The outer container enforces read-only review, offline execution and mount boundaries.
-        cmd(*args, input=prompt.encode())
-        return (Path(out) / "message").read_text()
+    args = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "2g",
+            "--cpus", "2", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
+            "--tmpfs", "/tmp:rw,nosuid,nodev,mode=1777", "-e", "HOME=/tmp", "-w", "/project",
+            "-v", f"{project}:/project:{'ro' if review else 'rw'}", "-v", f"{socket_dir}:/relay:ro",
+            "-v", f"{HERE / 'agent.py'}:/opt/god-worker.py:ro", "-i", IMAGE,
+            "python3", "/opt/god-worker.py", model]
+    try:
+        return capture(*args, input=prompt.encode(), stderr=subprocess.PIPE).decode().rstrip()
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode(errors="replace").strip()
+        raise ValueError(detail or f"Worker exited with status {error.returncode}.") from error
 
 
 def task_plan(project, brief, aws_gateway=None):
@@ -311,7 +305,7 @@ def execute(args, root, record):
         server = Server(relay_dir / "socket", PORT, [s for s in lines("redact") if s], aws_gateway)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         try:
-            brief = "Read .ai/rules.md when present. Task: " + args.brief
+            brief = "Task: " + args.brief
             if args.action == "review":
                 with tempfile.NamedTemporaryFile(prefix="pending-", suffix=".patch", dir=project) as pending:
                     pending.write(pending_diff(root, visible))
