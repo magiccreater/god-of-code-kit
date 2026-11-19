@@ -6,7 +6,7 @@ Install the two repositories side by side in the WSL Linux filesystem. From the 
 god doctor
 god self-test
 cd ~/code/your-project
-god task "Add pagination to the invoice list and cover empty pages"
+god task "Add pagination to the invoice list and cover empty pages" --single
 god review "Review the current staged and unstaged invoice changes"
 god apply RUN_ID
 ```
@@ -22,6 +22,21 @@ An initialized shared repository also carries its own launcher. From that projec
 1. Run `god oracle auth` in WSL. Enter your tenancy OCID, user OCID and home region at the OCI CLI prompts. Upload the generated **public PEM** under your OCI user's API keys. If you already have a DEFAULT API-key profile, keep it. This profile expects key material under `~/.oci`. Do not paste private keys in chat.
 2. Run `god oracle up`. This looks up your current public IPv4 address using checkip.amazonaws.com and permits SSH from its /32. Pass `god oracle up ADDRESS/32 COMPARTMENT_OCID` to supply it yourself. The default compartment is the tenancy root. Review the Terraform plan and type `apply` to provision. Check your remaining A1, storage and networking allowance first. On capacity errors, re-run later or select another availability domain with `GOD_AD_INDEX=1 god oracle up` before the first successful launch.
 3. Provisioning installs a pinned llama.cpp build and quantized model on the VM and opens the WSL tunnel. Initial compilation and model download can take time. Run `god doctor` for readiness. After a WSL restart, task startup attempts to reconnect the tunnel automatically.
+
+## Slack notifications
+
+Create a Slack app with an [incoming webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/) for the channel you want. In WSL Bash, save its URL in your local config:
+
+```bash
+mkdir -p "$HOME/.config/god-kit"
+read -rsp "Slack incoming webhook URL: " webhook
+printf '\n'
+install -m 600 /dev/null "$HOME/.config/god-kit/slack-webhook"
+printf '%s\n' "$webhook" > "$HOME/.config/god-kit/slack-webhook"
+unset webhook
+```
+
+`god doctor` checks the file format and permissions. A configured channel receives a notice when a coding or review run completes or fails. The notice contains the action, outcome, and run ID. Use `god status` in WSL to find the local report and patch. Slack failures produce a warning and preserve the local outcome. Delete the local webhook file to disable notices.
 
 ## Troubleshooting
 

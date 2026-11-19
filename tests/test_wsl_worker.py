@@ -1,3 +1,4 @@
+from argparse import Namespace
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest.mock import patch
 
 KIT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(KIT / "template/.claude/god/worker"))
+import notifications
 import relay
 import run
 
@@ -47,6 +49,58 @@ class Redaction(unittest.TestCase):
         for value in ({"type": "input_image"}, "-----BEGIN PRIVATE KEY-----"):
             with self.assertRaises(ValueError):
                 relay.Sanitizer().clean(value)
+
+
+class SlackNotifications(unittest.TestCase):
+    def test_success_sends_only_run_metadata(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            hook = root / "slack-webhook"
+            hook.write_text("https://hooks.slack.com/services/T123/B456/local-secret\n")
+            hook.chmod(0o600)
+            with patch.object(notifications.http.client, "HTTPSConnection") as network:
+                connection = network.return_value
+                connection.getresponse.return_value.__enter__.return_value.status = 200
+                notifications.notify(root, "task", "completed", "0123456789ab")
+                network.assert_called_once_with("hooks.slack.com", timeout=4)
+                method, path, payload, headers = connection.request.call_args[0]
+                self.assertEqual(method, "POST")
+                self.assertEqual(path, "/services/T123/B456/local-secret")
+                self.assertEqual(json.loads(payload), {"text": "God kit: task completed. Run `0123456789ab`."})
+                self.assertEqual(headers, {"Content-Type": "application/json"})
+                connection.close.assert_called_once()
+
+    def test_missing_insecure_and_non_slack_config_never_sends(self):
+        with tempfile.TemporaryDirectory() as scratch, patch.object(
+            notifications.http.client, "HTTPSConnection"
+        ) as network, patch.object(notifications.sys, "stderr"):
+            root = Path(scratch)
+            notifications.notify(root, "task", "failed", "0123456789ab")
+            hook = root / "slack-webhook"
+            hook.write_text("https://hooks.slack.com/services/T123/B456/local-secret\n")
+            hook.chmod(0o644)
+            notifications.notify(root, "task", "failed", "0123456789ab")
+            hook.chmod(0o600)
+            hook.write_text("https://hooks.slack.com@example.net/services/T123/B456/local-secret\n")
+            notifications.notify(root, "task", "failed", "0123456789ab")
+            network.assert_not_called()
+
+    def test_task_failure_is_recorded_before_notification(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            args = Namespace(action="task")
+
+            def notice(config, action, outcome, run_id):
+                self.assertEqual(action, "task")
+                self.assertEqual(outcome, "failed")
+                self.assertEqual((root / run_id / "error.txt").read_text(), "model unavailable")
+
+            with patch.object(run, "STATE", root), patch.object(
+                run, "execute", side_effect=ValueError("model unavailable")
+            ), patch.object(run, "notify", side_effect=notice) as send:
+                with self.assertRaisesRegex(ValueError, "model unavailable"):
+                    run.run(args, root)
+                send.assert_called_once()
 
 
 @unittest.skipUnless(os.getenv("GOD_DOCKER_TEST") == "1", "requires WSL and the worker image")
@@ -100,9 +154,10 @@ class EndToEnd(unittest.TestCase):
                 (root / "one").write_text("baseline\n")
                 subprocess.run(["git", "-C", root, "add", "one"], check=True)
                 subprocess.run(["bash", KIT / "install.sh", root, "--private"], check=True, stdout=subprocess.DEVNULL)
-                from argparse import Namespace
                 state = Path(tmp) / "state"
-                with patch.object(run, "STATE", state), patch.object(run, "PORT", api.server_port):
+                with patch.object(run, "STATE", state), patch.object(
+                    run, "PORT", api.server_port
+                ), patch.object(run, "CONFIG", Path(tmp) / "config"):
                     run.run(Namespace(action="task", brief="test for sam@example.com", parallel=False, single=True), root)
                     diff = next(state.glob("*/changes.patch"))
                     self.assertIn(b"+verified", diff.read_bytes())

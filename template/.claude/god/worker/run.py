@@ -15,6 +15,7 @@ import threading
 import uuid
 
 from linux_workspace import require_linux_workspace
+from notifications import notify, slack_path
 from relay import Sanitizer, Server
 
 HERE = Path(__file__).resolve().parent
@@ -85,6 +86,11 @@ def doctor():
                                                         stderr=subprocess.DEVNULL).returncode == 0
     print("Docker:", "ready" if docker else "unavailable (start Docker inside WSL)")
     print("Worker:", "ready" if docker and image_ready() else "built automatically on the first task")
+    try:
+        slack = "configured" if slack_path(CONFIG) else "disabled"
+    except (OSError, ValueError):
+        slack = "invalid (see Slack notifications in WSL.md)"
+    print("Slack notifications:", slack)
     ok = health()
     state = Path.home() / ".local/state/god-oracle"
     if ok:
@@ -236,6 +242,22 @@ def implement_units(project, socket_dir, units, brief):
 
 
 def run(args, root):
+    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    run_id = uuid.uuid4().hex[:12]
+    record = STATE / run_id
+    record.mkdir(mode=0o700)
+    (record / "repo").write_text(str(root))
+    print("Run", run_id, flush=True)
+    try:
+        execute(args, root, record)
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        (record / "error.txt").write_text(str(exc))
+        notify(CONFIG, args.action, "failed", run_id)
+        raise
+    notify(CONFIG, args.action, "completed", run_id)
+
+
+def execute(args, root, record):
     if not health():
         profile = Path(os.getenv("GOD_ORACLE_PROFILE", str(HERE.parents[4] /
                        "limpid-ai-dev-stack/dev-stack-template/oracle/profile"))) / "oracle.sh"
@@ -247,12 +269,6 @@ def run(args, root):
         if IMAGE != DEFAULT_IMAGE:
             raise ValueError("Build the selected GOD_WORKER_IMAGE inside WSL first.")
         cmd("docker", "build", "-t", IMAGE, HERE)
-    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
-    run_id = uuid.uuid4().hex[:12]
-    record = STATE / run_id
-    record.mkdir(mode=0o700)
-    (record / "repo").write_text(str(root))
-    print("Run", run_id, flush=True)
     with tempfile.TemporaryDirectory(dir=STATE) as folder:
         base = Path(folder)
         project = base / "project"
@@ -295,10 +311,7 @@ def run(args, root):
                 cmd(*git, "add", "-A", ".", cwd=project)
                 patch = capture(*git, "diff", "--cached", "--binary", tree, cwd=project)
                 (record / "changes.patch").write_bytes(patch)
-                print("Apply with: god apply", run_id) if patch else print("No changes produced.")
-        except (ValueError, OSError, subprocess.CalledProcessError) as exc:
-            (record / "error.txt").write_text(str(exc))
-            raise
+                print("Apply with: god apply", record.name) if patch else print("No changes produced.")
         finally:
             server.shutdown()
             server.server_close()
