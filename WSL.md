@@ -1,6 +1,6 @@
 # Assign a coding task from WSL
 
-Install the two repositories side by side in the WSL Linux filesystem. From the kit, run `bash setup-wsl.sh` once. The machine-installed `god` command also works from projects that have no kit files yet.
+Install the two repositories side by side in the WSL Linux filesystem. From the kit, run `bash setup-wsl.sh` once. The machine-installed `god` command also works from projects that have no kit files yet. The kit's Python worker runs in Docker and needs no Codex CLI installation, OpenAI key, or Codex login.
 
 ```bash
 god doctor
@@ -13,7 +13,7 @@ god apply RUN_ID
 
 The first task or review installs the kit in private mode if needed. For a shared team install, use `god init .` explicitly. The coding run saves a binary-safe patch and a report under `~/.local/state/god-kit/RUN_ID`. Apply the task patch before asking to review the resulting working-tree diff. A read-only review can also inspect existing tracked code. Patch application checks the current files and fails on conflicting edits. No push or commit is automatic.
 
-The default task asks the Oracle model whether two independent units can own disjoint files. A malformed or overlapping plan uses one developer. Each unit gets its own checkout. A final integrator sees their combined edits and is instructed to run the project's tests. `--single` skips planning for small jobs. `--parallel` also asks two read-only workers to research and design concurrently. On the free VM, model requests can queue behind each other while WSL tools run concurrently.
+The default task asks the selected model whether two independent units can own disjoint files. A malformed or overlapping plan uses one developer. Each unit gets its own checkout. A final integrator sees their combined edits and is instructed to run the project's tests. `--single` skips planning for small jobs. `--parallel` also asks two read-only workers to research and design concurrently. On the free VM, model requests can queue behind each other while WSL tools run concurrently.
 
 ## Sydney AWS coding gateway
 
@@ -28,7 +28,7 @@ god task "Add a test for an empty invoice list" --single
 god review "Review the current diff"
 ```
 
-`GOD_AWS_STACK` selects a stack other than `limpid-chat-gateway`. The relay discovers the stack endpoint, signs requests from WSL, and translates Codex Responses messages into Chat Completions. Codex receives streamed answers and local shell tool calls via its existing per-run socket. The worker has no AWS credentials or network access of its own.
+`GOD_AWS_STACK` selects a stack other than `limpid-chat-gateway`. The relay discovers the stack endpoint, signs requests from WSL, and translates the worker's local Responses messages into Chat Completions. The Python worker receives streamed results over its per-run Unix socket and executes Bash commands locally. The worker has no AWS credentials or network access of its own.
 
 AWS requests select `private-coder` by default. When every part of the run, including files and tool output it might send, is public or synthetic, use `--public-openrouter` for a task or review. That selects `private-coder-public`. The Sydney stack must have an OpenRouter SecureString configured for this route to use `free-auto` when Bedrock is unavailable.
 
@@ -65,18 +65,18 @@ unset webhook
 
 | Symptom | Action |
 |---|---|
-| CLI or Docker missing | `god doctor` prints what it found. Run `god self-test` to exercise Docker, Codex and the sanitizer with a synthetic model. It builds the default worker image on first use. |
+| CLI or Docker missing | `god doctor` prints what it found. Run `god self-test` to exercise Docker, the Python worker and the sanitizer with synthetic Oracle and AWS responses. It builds the default worker image on first use. |
 | OCI authentication fails | Check that the public PEM fingerprint, user OCID, tenancy OCID and DEFAULT profile region match. Retry `god oracle up` after uploading the public key. |
 | Provisioning or deployment interrupted | Repeat `god oracle up` to reuse Terraform state. After the IP is recorded, `god oracle deploy` retries installation on that VM. Preserve `~/.local/state/god-oracle`, including its state and SSH key. |
 | SSH fails after changing internet connections | Run `god oracle up` again to update your allowed source address. |
 | Gateway reachable, model loading or failed | Run `god oracle logs` for both systemd units. After the model is ready, retry the task. |
-| Tests need a different language or dependencies | Build an image FROM god-kit-worker:0.170.0 with the project's toolchain and dependencies baked in. Set GOD_WORKER_IMAGE to its local tag. Worker runtime has no internet or host package caches. |
+| Tests need a different language or dependencies | Build an image FROM god-kit-worker:1.0.0 with the project's toolchain and dependencies baked in. Set GOD_WORKER_IMAGE to its local tag. Worker runtime has no internet or host package caches. |
 | Missing project files | The snapshot includes current contents of Git-tracked regular files and local kit Markdown. Stage new files that the agent should see. Symlinks and excluded paths are skipped. Review the generated patch and test results before applying. |
 | Request blocked | Keep attachments, encoded blobs and private keys out of the task. Add project-specific literals or paths to the local exclusions below. |
 
 ## Privacy and inference cost
 
-Every worker runs inside a WSL Docker container with no external network, host credentials or Docker socket. It accesses inference through a Unix socket to the WSL sanitizer. Reviews mount the checkout read-only. Coding and review both use the selected backend. The reviewer starts with a fresh model context.
+Every worker runs inside a WSL Docker container with no external network, host credentials or Docker socket. It accesses inference through a Unix socket to the WSL sanitizer. Reviews mount the checkout read-only. Coding and review both use the selected backend. The reviewer starts with a fresh model context. A worker makes up to 12 model turns. Long command output is truncated, and commands have a five-minute timeout. Large tasks can be split into smaller assignments.
 
 Add one literal identifier per line to `~/.config/god-kit/redact` and one repo-relative glob per line to `~/.config/god-kit/exclude`. The sanitizer also handles known credential patterns and email addresses on prompts and tool outputs. Free-form confidential facts, unfamiliar credential formats and business logic can survive pattern redaction. Local reports may contain project information.
 

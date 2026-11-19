@@ -20,6 +20,8 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Done
 
+- [x] T-013 · Replace Codex CLI with the kit's Python worker · WSL supervisor · A native worker edited and verified a synthetic file over two live Sydney free-auto turns, then produced a patch that applied cleanly. The WSL tests also cover both gateway protocols with synthetic responses.
+
 - [x] T-005 · Connect the personal WSL Codex worker to the Sydney gateway · limpid-ai-dev-stack and god-of-code-kit · Live public free-auto proved IAM-authenticated streaming, a shell tool call, a local edit and check, and clean patch application. [Gateway](https://github.com/magiccreater/limpid-ai-dev-stack/pull/7) and [WSL bridge](https://github.com/magiccreater/god-of-code-kit/pull/6).
 - [x] T-001 · Ship the per-repo task board, readiness checks, and review rules · template/.ai and template/.claude · verified by the kit tests and [PR #1](https://github.com/magiccreater/god-of-code-kit/pull/1).
 - [x] T-002 · Isolate Codex workers and sanitize inference requests from WSL · WSL supervisor · synthetic inference smoke test verified a tool call, redaction, a patch, and clean application. [PR #2](https://github.com/magiccreater/god-of-code-kit/pull/2).

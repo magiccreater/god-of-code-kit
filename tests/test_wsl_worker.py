@@ -1,4 +1,5 @@
 from argparse import Namespace
+import io
 import json
 import os
 from pathlib import Path
@@ -8,10 +9,11 @@ import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 KIT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(KIT / "template/.claude/god/worker"))
+import agent
 import notifications
 import relay
 import run
@@ -103,6 +105,43 @@ class SlackNotifications(unittest.TestCase):
                 send.assert_called_once()
 
 
+class NativeWorker(unittest.TestCase):
+    def test_incomplete_response_cannot_run_a_command(self):
+        connection = MagicMock()
+        response = connection.getresponse.return_value.__enter__.return_value
+        response.status = 200
+        response.getheader.return_value = "text/event-stream"
+        item = {"type": "response.output_item.done", "item": {"type": "function_call",
+                "call_id": "1", "name": "exec_command", "arguments": '{"cmd":"true"}'}}
+        response.readline.side_effect = io.BytesIO(
+            ("data: " + json.dumps(item) + "\n\n").encode()
+        ).readline
+        with patch.object(agent, "RelayConnection", return_value=connection), patch.object(
+            agent, "execute_command",
+        ) as execute:
+            with self.assertRaisesRegex(ValueError, "without a complete response"):
+                agent.run("Example task", "sample")
+            execute.assert_not_called()
+
+    def test_command_returns_exit_code_and_bounds_output(self):
+        with patch.object(agent, "MAX_OUTPUT", 4):
+            output = agent.execute_command("printf 123456; exit 3")
+        self.assertEqual(output, "Exit code: 3\n1234\n[Output truncated]")
+
+    def test_command_timeout_terminates_background_processes(self):
+        with patch.object(agent, "COMMAND_TIMEOUT", 0.1):
+            output = agent.execute_command("sleep 30 & wait")
+        self.assertIn("Command timed out", output)
+
+    def test_explicit_permission_request_is_never_executed(self):
+        with patch.object(agent, "execute_command") as execute:
+            result = agent.tool_result({"name": "exec_command", "arguments": json.dumps({
+                "cmd": "true", "sandbox_permissions": "require_escalated",
+            })})
+        self.assertIn("Invalid arguments", result)
+        execute.assert_not_called()
+
+
 @unittest.skipUnless(os.getenv("GOD_DOCKER_TEST") == "1", "requires WSL and the worker image")
 class EndToEnd(unittest.TestCase):
     def test_cli_two_turns_and_patch(self):
@@ -127,15 +166,8 @@ class EndToEnd(unittest.TestCase):
                     self.wfile.write(("event: " + kind + "\ndata: " + json.dumps(event) + "\n\n").encode())
                 emit("response.created", response={"id": "r"+str(len(requests)), "object": "response"})
                 if len(requests) == 1:
-                    tools = requests[0]["tools"]
-                    names = [t.get("name") for t in tools]
-                    # CLI versions may offer exec_command directly or inside a namespace.
-                    name = next((n for n in names if n in ("exec_command", "shell_command")), "exec_command")
-                    key = "cmd" if name == "exec_command" else "command"
-                    item = {"type": "function_call", "id": "fc1", "call_id": "c1", "name": name,
-                            "arguments": json.dumps({key: "echo verified > result.txt && echo sam@example.com"})}
-                    if any(t.get("type") == "namespace" for t in tools):
-                        item["namespace"] = "functions"
+                    item = {"type": "function_call", "id": "fc1", "call_id": "c1", "name": "exec_command",
+                            "arguments": json.dumps({"cmd": "echo verified > result.txt && echo sam@example.com"})}
                 else:
                     item = {"type": "message", "id": "m1", "role": "assistant",
                             "content": [{"type": "output_text", "text": "Verified."}]}
@@ -155,17 +187,16 @@ class EndToEnd(unittest.TestCase):
                 subprocess.run(["git", "-C", root, "add", "one"], check=True)
                 subprocess.run(["bash", KIT / "install.sh", root, "--private"], check=True, stdout=subprocess.DEVNULL)
                 state = Path(tmp) / "state"
-                with patch.object(run, "STATE", state), patch.object(
-                    run, "PORT", api.server_port
-                ), patch.object(run, "CONFIG", Path(tmp) / "config"):
+                with patch.dict(os.environ, {"GOD_AWS_PROFILE": ""}), patch.object(
+                    run, "STATE", state
+                ), patch.object(run, "PORT", api.server_port), patch.object(run, "CONFIG", Path(tmp) / "config"):
                     run.run(Namespace(action="task", brief="test for sam@example.com", parallel=False, single=True), root)
                     diff = next(state.glob("*/changes.patch"))
                     self.assertIn(b"+verified", diff.read_bytes())
                     subprocess.run(["git", "-C", root, "apply", diff], check=True)
                     self.assertEqual((root / "result.txt").read_text(), "verified\n")
                 self.assertGreaterEqual(len(requests), 2)
-                self.assertTrue(any(t.get("name") in ("exec_command", "shell_command", "shell")
-                                    for t in requests[0].get("tools", [])), "model must see an executable shell tool")
+                self.assertEqual([t["name"] for t in requests[0]["tools"]], ["exec_command"])
                 self.assertNotIn("sam@example.com", json.dumps(requests))
         finally:
             api.shutdown()

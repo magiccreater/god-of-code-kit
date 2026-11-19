@@ -1,12 +1,9 @@
-"""Translate the stateless Codex text and function-tool subset to Chat Completions."""
+"""Translate stateless text and function tools to Chat Completions."""
 from http.client import HTTPException
 import json
 import time
 import uuid
 
-
-SHELL_TOOLS = {"exec_command", "shell_command", "shell"}
-APPROVAL_FIELDS = {"sandbox_permissions", "justification", "prefix_rule"}
 
 def text_content(content):
     if isinstance(content, str):
@@ -20,19 +17,6 @@ def text_content(content):
 
 def chat_tool(tool):
     function = {key: tool[key] for key in ("name", "description", "parameters", "strict") if key in tool}
-    parameters = function.get("parameters")
-    if function.get("name") in SHELL_TOOLS and isinstance(parameters, dict):
-        properties = parameters.get("properties", {})
-        if isinstance(properties, dict):
-            function["parameters"] = {
-                **parameters,
-                "properties": {name: prop for name, prop in properties.items() if name not in APPROVAL_FIELDS},
-            }
-            if isinstance(parameters.get("required"), list):
-                function["parameters"]["required"] = [
-                    name for name in parameters["required"] if name not in APPROVAL_FIELDS
-                ]
-        function["description"] = "Run a shell command inside the offline WSL worker with its default permissions."
     return {"type": "function", "function": function}
 
 
@@ -101,12 +85,6 @@ def function_item(call_id, name, arguments):
     parsed = json.loads(arguments)
     if not isinstance(parsed, dict):
         raise ValueError("Invalid function arguments")
-    if (name in SHELL_TOOLS and parsed.get("sandbox_permissions") in (None, "use_default")
-            and APPROVAL_FIELDS.intersection(parsed)):
-        # Drop irrelevant rationale for default sandbox calls. Preserve explicit requests
-        # for escalated permissions so the worker's approval policy can deny them.
-        arguments = json.dumps({key: value for key, value in parsed.items()
-                                if key not in APPROVAL_FIELDS}, separators=(",", ":"))
     return {"type": "function_call", "id": "fc_" + uuid.uuid4().hex, "status": "completed",
             "call_id": call_id, "name": name, "arguments": arguments}
 
@@ -192,7 +170,7 @@ def response_events(upstream, model):
                         call[key] += details.get(key) or ""
         if not complete or reason not in ("stop", "tool_calls") or bool(calls) != (reason == "tool_calls"):
             raise ValueError("Chat stream ended without a complete tool or message")
-        # Validate every call before exposing any call to Codex.
+        # Validate every call before exposing any call to the worker.
         tool_items = [function_item(call["id"], call["name"], call["arguments"])
                       for _, call in sorted(calls.items())]
         if text_parts:
