@@ -6,11 +6,11 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Blocked
 
+- [ ] T-005 ? Connect the personal IDE to a Sydney AWS inference gateway ? limpid-ai-dev-stack and god-of-code-kit ? since 2026-11-19 ? [Infrastructure PR #6](https://github.com/magiccreater/limpid-ai-dev-stack/pull/6) validated the template and passed mocked tool streaming. Live Bedrock is blocked by zero applied Sydney requests and tokens per minute. A WSL signing and protocol bridge is still needed to test Codex edits and local verification.
 - [ ] T-009 ? Launch the Always Free Oracle inference VM in Sydney ? limpid-ai-dev-stack ? since 2026-11-19 ? A1 host capacity was unavailable on the last check. Keep any retry within the free allocation.
 
 ## Todo
 
-- [ ] T-005 ? Connect the personal IDE to a Sydney AWS inference gateway ? limpid-ai-dev-stack and god-of-code-kit ? since 2026-11-19 ? Start with Bedrock and a small model allowlist. Prove streaming, tool calls, a patch, and a local test on one coding task. Reuse WSL isolation and sanitization.
 - [ ] T-006 ? Enforce the configured monthly usage ceiling in the gateway ? limpid-ai-dev-stack ? since 2026-11-19 ? Reserve estimated usage before model calls and cap output, retries, and concurrency. Include embeddings, storage, and gateway usage before credits. AWS Budgets tracks spend separately.
 - [ ] T-007 ? Persist per-repository task state and agent inboxes ? coordination API and WSL workers ? since 2026-11-19 ? Prove that a reviewer can restart, recover an unread handoff, and review the same commit once. Gate all operations by repository access.
 - [ ] T-008 ? Retrieve approved project memory by keyword and meaning ? Sydney retrieval service ? since 2026-11-19 ? Compare direct S3 Vectors hybrid retrieval against exact lookup using real file names, errors, and decisions. Return source references and measure cost and latency. Read access has been checked. Index creation and search still need verification.
