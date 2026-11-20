@@ -11,6 +11,13 @@ case "${1:-help}" in
   oracle) shift; file="${GOD_ORACLE_PROFILE:-$kit/../limpid-ai-dev-stack/dev-stack-template/oracle/profile}/oracle.sh"
           [[ -f "$file" ]] || { echo "Install both repos side by side or set GOD_ORACLE_PROFILE to the profile directory."; exit 1; }
           bash "$file" "$@";;
+  decision) shift
+        grep -qi microsoft /proc/sys/kernel/osrelease || { echo "Run this in WSL."; exit 1; }
+        if [[ "${1:-}" == "check" && "${2:-}" != "--help" ]]; then
+          root=$(git rev-parse --show-toplevel) || { echo "Open a Git repository first."; exit 1; }
+          python3 "$kit/template/.claude/god/worker/linux_workspace.py" "$root"
+        fi
+        exec python3 "$kit/template/.claude/god/decide/laya_decision.py" "$@";;
   task|review|apply|doctor|status)
         if [[ "$1" =~ ^(task|review)$ && "${2:-}" != --help && "${2:-}" != -h ]]; then
           root=$(git rev-parse --show-toplevel) || { echo "Open a Git repository first."; exit 1; }
@@ -18,5 +25,5 @@ case "${1:-help}" in
           if [[ ! -f "$root/.ai/rules.md" ]]; then bash "$kit/install.sh" "$root" --private; fi
         fi
         exec python3 "$kit/template/.claude/god/worker/run.py" "$@";;
-  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | task "brief" [--single|--parallel] [--public-openrouter] | review "scope" [--public-openrouter] | apply RUN_ID';;
+  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | decision | task "brief" [--single|--parallel] [--public-openrouter] | review "scope" [--public-openrouter] | apply RUN_ID';;
 esac

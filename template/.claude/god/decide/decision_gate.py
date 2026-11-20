@@ -618,8 +618,15 @@ def publication_check(root):
 
 
 # --------------------------------------------------------------------------- commands
-def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
+def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False, *,
+               advisory_provider=None, model_call=None):
     cfg = load_config(root)
+    original_digest = config_digest(cfg)
+    if advisory_provider is not None:
+        if not cfg["checks"] or skip_checks:
+            raise GateError("AWS Laya advisory checks require local test commands.")
+        cfg["mode"] = "advisory"
+        cfg["provider"].update(advisory_provider)
     if cfg["mode"] == "off":
         return {"verdict": OFF, "mode": "off", "reasons": ["decision gate is off (.ai/decision-gate.json)"],
                 "advice": []}, None
@@ -667,7 +674,7 @@ def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
         receipt["verdict"] = verdict
         receipt["reasons"] = list(dict.fromkeys(list(receipt["reasons"]) + list(reasons)))
         receipt["advice"] = list(dict.fromkeys(list(receipt["advice"]) + list(advice)))
-        return receipt, write_receipt(root, receipt)
+        return receipt, write_receipt(root, receipt) if advisory_provider is None else None
 
     if not change["files"]:
         return finish(NOT_READY, ["no changes found against base %s" % base[:12]],
@@ -702,7 +709,7 @@ def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
 
     # 2. ask the model
     try:
-        data, latency = call_model(cfg, state, asked)
+        data, latency = (model_call or call_model)(cfg, state, asked)
         receipt["model"]["latency_ms"] = latency
         receipt["model"]["reported_model"] = data.get("model")
         expected = prov.get("expected_model")
@@ -717,7 +724,7 @@ def gate_check(root, goal_arg=None, base_arg=None, skip_checks=False):
     # re-check after inference: a check (formatter, codegen) or a person may have changed files meanwhile
     if collect_change(root, base)["diff_sha256"] != change["diff_sha256"]:
         caps.append("files changed while the gate was running (a check may rewrite code); run it again")
-    if config_digest(load_config(root)) != receipt["binding"]["config_sha256"]:
+    if config_digest(load_config(root)) != original_digest:
         caps.append("decision-gate config changed while the gate was running; run it again")
     if meta["truncated"] and cfg["input"].get("on_truncation", "needs_review") != "allow":
         caps.append("the diff was too long for the model (%d chars shown); split the change or review it yourself"

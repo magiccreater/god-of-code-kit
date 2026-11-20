@@ -38,6 +38,18 @@ god task "Add a test to this public sample" --single --public-openrouter
 
 Secure the WSL profile and choose the repository and route before starting a run. Private coding requires positive Sydney Bedrock quota. The relay refuses paid or expired AWS plans and rejects unsupported attachments and requests above the gateway's 64 KiB input limit. Unset `GOD_AWS_PROFILE` to return to the Oracle tunnel.
 
+## Laya decisions in Sydney
+
+The optional [Laya pilot](https://github.com/magiccreater/limpid-ai-dev-stack/tree/main/dev-stack-template/aws/laya-decisions) uses the same temporary WSL AWS login as the coding gateway. It calls its own IAM-only Lambda and has a separate decision allowance.
+
+```bash
+export GOD_AWS_PROFILE=god-of-code-kit
+god decision route --kind bugfix --scope small
+god decision check --public --goal "Add a regression test for empty invoices"
+```
+
+The route command sends only the selected task type and size. It recommends a model capability (quick, deep, or review) without changing the chat model. The check command runs the test commands listed under `checks` in `.ai/decision-gate.json` before asking Laya about the current public patch. Use it only with public or synthetic code and goal text. The result is advisory and does not write a push-gate receipt. For private patches, use the existing local decision gate on loopback.
+
 ## Oracle setup
 
 An initialized shared repository also carries its own launcher. From that project, `bash .claude/god/run.sh task "your assignment"` uses the installed worker and the existing WSL tunnel. Run `god status` to locate recent reports and patches.
