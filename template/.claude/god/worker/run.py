@@ -280,9 +280,10 @@ def run(args, root):
 def execute(args, root, record):
     aws_profile = os.getenv("GOD_AWS_PROFILE")
     public = getattr(args, "public_openrouter", False)
-    if public and not aws_profile:
-        raise ValueError("--public-openrouter requires GOD_AWS_PROFILE.")
-    aws_gateway = AwsGateway.discover(aws_profile, public=public) if aws_profile else None
+    public_free = getattr(args, "public_free", False)
+    if (public or public_free) and not aws_profile:
+        raise ValueError("Public AWS routing requires GOD_AWS_PROFILE.")
+    aws_gateway = AwsGateway.discover(aws_profile, public=public, public_free=public_free) if aws_profile else None
     if not aws_gateway and not health():
         profile = Path(os.getenv("GOD_ORACLE_PROFILE", str(HERE.parents[4] /
                        "limpid-ai-dev-stack/dev-stack-template/oracle/profile"))) / "oracle.sh"
@@ -350,8 +351,11 @@ def main():
     for name in ("task", "review"):
         child = subs.add_parser(name)
         child.add_argument("brief")
-        child.add_argument("--public-openrouter", action="store_true",
-                           help="permit the AWS fallback for public or synthetic inputs")
+        public_route = child.add_mutually_exclusive_group()
+        public_route.add_argument("--public-openrouter", action="store_true",
+                                  help="permit OpenRouter for public or synthetic inputs")
+        public_route.add_argument("--public-free", action="store_true",
+                                  help="permit the Sydney LiteLLM approved free-provider pool for public or synthetic inputs")
         if name == "task":
             child.add_argument("--parallel", action="store_true", help="research and design concurrently before implementing")
             child.add_argument("--single", action="store_true", help="skip the planning call and use one coding worker")

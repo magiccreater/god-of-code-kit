@@ -25,5 +25,5 @@ case "${1:-help}" in
           if [[ ! -f "$root/.ai/rules.md" ]]; then bash "$kit/install.sh" "$root" --private; fi
         fi
         exec python3 "$kit/template/.claude/god/worker/run.py" "$@";;
-  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | decision | task "brief" [--single|--parallel] [--public-openrouter] | review "scope" [--public-openrouter] | apply RUN_ID';;
+  *) echo 'god init [repo] [--private] | doctor | self-test | oracle | decision | task "brief" [--single|--parallel] [--public-openrouter|--public-free] | review "scope" [--public-openrouter|--public-free] | apply RUN_ID';;
 esac

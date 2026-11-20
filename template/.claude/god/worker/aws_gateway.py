@@ -71,7 +71,7 @@ def sign_headers(host, path, data, credentials, now):
 
 
 class AwsGateway:
-    def __init__(self, url, credentials, public=False):
+    def __init__(self, url, credentials, public=False, public_free=False):
         endpoint = ENDPOINT.fullmatch(url)
         if not endpoint:
             raise GatewayError("Expected the Sydney gateway stack's pilot BaseUrl.")
@@ -82,15 +82,21 @@ class AwsGateway:
         self.host = endpoint[1]
         self.path = "/pilot/v1/chat/completions"
         self.credentials = credentials
-        self.model = "private-coder-public" if public else "private-coder"
+        if public and public_free:
+            raise GatewayError("Choose one public inference option.")
+        self.model = "public-free-coder" if public_free else (
+            "private-coder-public" if public else "private-coder"
+        )
 
     @classmethod
-    def discover(cls, profile, public=False):
+    def discover(cls, profile, public=False, public_free=False):
         plan = cli(profile, "us-east-1", "freetier", "get-account-plan-state")
         if plan.get("accountPlanType") != "FREE" or plan.get("accountPlanStatus") != "ACTIVE":
             raise GatewayError("This WSL gateway requires an active AWS Free Plan.")
-        stack = cli(profile, REGION, "cloudformation", "describe-stacks", "--stack-name",
-                    os.getenv("GOD_AWS_STACK", DEFAULT_STACK))
+        stack_name = os.getenv("GOD_AWS_STACK", DEFAULT_STACK)
+        if public_free and stack_name == DEFAULT_STACK:
+            raise GatewayError("Set GOD_AWS_STACK=limpid-litellm-router for --public-free.")
+        stack = cli(profile, REGION, "cloudformation", "describe-stacks", "--stack-name", stack_name)
         stacks = stack.get("Stacks") or []
         if len(stacks) != 1 or stacks[0].get("StackStatus") not in (
             "CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"
@@ -99,7 +105,7 @@ class AwsGateway:
         outputs = stacks[0].get("Outputs", [])
         url = next((entry["OutputValue"] for entry in outputs if entry["OutputKey"] == "BaseUrl"), "")
         creds = cli(profile, REGION, "configure", "export-credentials", "--format", "process")
-        return cls(url, creds, public=public)
+        return cls(url, creds, public=public, public_free=public_free)
 
     @contextmanager
     def open(self, body):
