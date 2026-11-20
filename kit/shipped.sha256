@@ -25,6 +25,7 @@ ebd1f6a75a0856ea43672e15b48b68cac6ffdda62fadfd88fe3dea6c63c8f55b  .claude/god/ho
 9d7cea4794e6eb9ef59613fc06dfeb0a319f9af0961940fd729bd157e3230baf  .claude/god/worker/Dockerfile
 f3ff801bd873b0029db95dc11af038a2ae1542ab3661316ad01ae80c57eab98c  .claude/god/worker/agent.py
 70cd98797196cda98b49b10cc44ec57e3bc7f49a0595a7e28d4a43cef74574cf  .claude/god/worker/aws_gateway.py
+8f110d10f0c1695ac4ed99209efc9c72b19baea04546caf9a0067958aed254cb  .claude/god/worker/aws_gateway.py
 00516889bc80598daf1d3b66be08bc6af442cd579204e707030c21800b3051ba  .claude/god/worker/bridge.py
 2b41c102d8a6b4a05ba71774f622352d519ab0727673b188ff4ebc929b84d24c  .claude/god/worker/chat_responses.py
 94494ebcdfd1f5e28f0478a09655341eac640f9295938d2778e92ab84932e586  .claude/god/worker/chat_responses.py
@@ -36,6 +37,7 @@ fb2395702eff30b6652b1a58a72b2eeb6fb3be9e208f62c63b12df48a47c96b6  .claude/god/wo
 90dad1df3b4d62babcdbdd870db820f29a364211f2f55f08040a1c14e665046e  .claude/god/worker/relay.py
 ad2dc01606225df6df6d4d9c5e17417ae780997407d2e92241a18e740f1d17c6  .claude/god/worker/relay.py
 e71f438a2bb2d3674e492d40e53fdd3a18753adc178d245e073951c6498c0caa  .claude/god/worker/relay.py
+08c9a6ad3e366eb27f2b06b180e375072f390c9709ce3f3f446fa9d00959144e  .claude/god/worker/run.py
 1ad4ecd98ab84d32e032de3f8d32784992aa33607c9c2822b1fd7436b3a604b1  .claude/god/worker/run.py
 367b61499dc3f1e9480b172557c6ec2bda4c679014ffd02ce246c6c8ed42ad47  .claude/god/worker/run.py
 9aa958b9ab03d8d035ce4a0cd03e18d1c07c95841f7e1da6f2fdb125f237bb1b  .claude/god/worker/run.py

@@ -38,7 +38,20 @@ god task "Add a test to this public sample" --single --public-openrouter
 
 Secure the WSL profile and choose the repository and route before starting a run. Private coding requires positive Sydney Bedrock quota. The relay refuses paid or expired AWS plans and rejects unsupported attachments and requests above the gateway's 64 KiB input limit. Unset `GOD_AWS_PROFILE` to return to the Oracle tunnel.
 
-## Laya decisions in Sydney
+## Public coding with Sydney LiteLLM
+
+Use the [Sydney LiteLLM stack](https://github.com/magiccreater/limpid-ai-dev-stack/tree/main/dev-stack-template/aws/litellm-router) for task-aware public model selection.
+
+```bash
+export GOD_AWS_PROFILE=god-of-code-kit
+export GOD_AWS_STACK=limpid-litellm-router
+god doctor
+god task "Add a test to this public sample" --single --public-free
+```
+
+The WSL worker sends chat requests to LiteLLM. LiteLLM invokes Laya in Sydney, keeps private code outside the public pool, and chooses from the free providers enabled by the stack operator. Use `--public-openrouter` to permit OpenRouter only. Use these public profiles for public or synthetic prompts, code, and tool output.
+
+## Manual Laya diagnostics
 
 The optional [Laya pilot](https://github.com/magiccreater/limpid-ai-dev-stack/tree/main/dev-stack-template/aws/laya-decisions) uses the same temporary WSL AWS login as the coding gateway. It calls its own IAM-only Lambda and has a separate decision allowance.
 

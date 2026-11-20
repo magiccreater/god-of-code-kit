@@ -35,6 +35,7 @@ class GatewayTests(unittest.TestCase):
     def test_route_requires_an_explicit_public_choice(self):
         self.assertEqual(AwsGateway(URL, CREDENTIALS).model, "private-coder")
         self.assertEqual(AwsGateway(URL, CREDENTIALS, public=True).model, "private-coder-public")
+        self.assertEqual(AwsGateway(URL, CREDENTIALS, public_free=True).model, "public-free-coder")
         for invalid in (URL.replace("ap-southeast-2", "us-east-1"), URL + "?extra=1",
                         "https://outside.example/pilot/v1", URL.replace("https", "http")):
             with self.assertRaises(GatewayError):
@@ -158,7 +159,7 @@ class WorkerChatBridge(unittest.TestCase):
                     run, "STATE", state
                 ), patch.object(run, "CONFIG", local / "config"):
                     run.run(args, repo)
-                discover.assert_called_once_with("sample", public=True)
+                discover.assert_called_once_with("sample", public=True, public_free=False)
                 diff = next(state.glob("*/changes.patch"))
                 self.assertIn(b"+verified", diff.read_bytes())
                 subprocess.run(["git", "-C", repo, "apply", diff], check=True)
