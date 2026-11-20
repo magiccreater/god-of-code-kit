@@ -11,6 +11,8 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Todo
 
+- [ ] T-015 · Evaluate Laya on coding decisions · Collect approved task labels and measure incorrect ready verdicts and tier recommendations on held-out cases before enabling automatic model selection or fitting a checkpoint.
+
 - [ ] T-014 · Ship a standalone WSL runner · Rust launcher preview · The opt-in Cargo package forwards to the existing kit launcher. A future release needs to bootstrap its own worker and relay and pass the existing sandbox, gateway, and patch checks.
 
 - [ ] T-006 · Enforce the configured monthly usage ceiling in the gateway · limpid-ai-dev-stack · since 2026-11-19 · Reserve estimated usage before model calls and cap output, retries, and concurrency. Include embeddings, storage, and gateway usage before credits. AWS Budgets tracks spend separately.
