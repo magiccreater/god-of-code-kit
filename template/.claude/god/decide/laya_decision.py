@@ -31,8 +31,8 @@ def aws(profile, region, *args):
     try:
         result = subprocess.run(
             ["aws", "--profile", profile, "--region", region, "--output", "json",
-             "--cli-connect-timeout", "5", "--cli-read-timeout", "55", *args],
-            capture_output=True, text=True, timeout=62, env=env, check=True,
+             "--cli-connect-timeout", "5", "--cli-read-timeout", "125", *args],
+            capture_output=True, text=True, timeout=135, env=env, check=True,
         )
         return json.loads(result.stdout)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
