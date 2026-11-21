@@ -1,6 +1,6 @@
 # Project State Service low-level design
 
-**Status** Proposed. The AWS pilot and the latency targets below still need verification.
+**Status** Proposed. The AWS pilot and the latency targets below still need verification. The 100 ms warm p95 latency target is an unvalidated hypothesis to be measured and validated under T-020, particularly given the architectural tension of avoiding connection pools (paying per-request TLS + login overhead or RDS Data API latency) so Aurora can auto-pause.
 
 ## Scope
 
@@ -20,7 +20,7 @@ The [PR governance design](pr-governance-lld.md) uses the state service for port
 
 ## PostgreSQL schema
 
-Use versioned SQL migrations and stable UUIDs. Include project_id in composite keys and foreign keys for all project-owned rows. Use UTC timestamps. Enforce project membership through the API and PostgreSQL row-level security. Use a non-owner request role and transaction-scoped authorization so pooled connections cannot retain the previous request's project scope. Internal worker and telemetry identities have separate grants.
+Use versioned SQL migrations and stable UUIDs. Include project_id in composite keys and foreign keys for all project-owned rows. Use UTC timestamps. Enforce project membership through the API and PostgreSQL row-level security (RLS). Note that RLS isolates projects from each other; worktrees mapped to the same project share that project's scope. Use a non-owner request role and transaction-scoped authorization (`SET LOCAL app.current_project_id = :project_id`) so pooled connections cannot retain the previous request's project scope. Internal worker and telemetry identities have separate grants.
 
 | Table or group | Key fields and indexes |
 |---|---|
@@ -34,6 +34,27 @@ Use versioned SQL migrations and stable UUIDs. Include project_id in composite k
 | artifacts | Project, artifact ID, content digest, size, visibility and locator. Store bounded payloads in PostgreSQL for the pilot. Move larger patches and reports to a portable object-storage adapter when needed. |
 
 Store session content and operational telemetry under separate permissions. Operational telemetry excludes raw prompts, tool output, diffs, and credentials. Workers store approved conversation checkpoints and artifacts under project retention and deletion rules. Model calls store usage and outcome metadata. Record unavailable usage as null. Configure transcript, telemetry, artifact and backup retention before enabling real private data.
+
+## Implementation decisions (T-017)
+
+The first T-017 PR resolves three primary design choices:
+
+1. **API Framework: FastAPI with Uvicorn**
+   - High-performance asynchronous Python HTTP framework.
+   - Native Pydantic schema validation for request payloads and responses.
+   - Built-in OpenAPI specification generation and clean router modularity.
+   - Standardized on Uvicorn, aligning directly with the existing dev stack (`aws/litellm-router/colocation/deploy.py` and `shared`).
+
+2. **Database Migration Tool: Alembic**
+   - Standard Python migration manager for PostgreSQL.
+   - Versioned, sequential migration scripts in `alembic/versions`.
+   - Full programmatic CLI support (`alembic upgrade head`, downgrade validation), integrated directly into local WSL Docker Compose startup and test fixtures.
+
+3. **Local Credentials & Project-Scoped Auth in WSL**
+   - Local tokens: Short-lived HMAC-SHA256 signed bearer tokens (JWT) generated with a local secret (`STATE_JWT_SECRET` in `.env`).
+   - Token payload: `sub` (caller identity), `project_id` (mandatory project UUID), `role` (`worker`, `telemetry`, or `admin`), and `exp` (15–60 minute expiry).
+   - RLS integration: The State API extracts `project_id` from the verified token and executes `SET LOCAL app.current_project_id = :project_id` within the request's transaction. PostgreSQL RLS policies enforce `project_id = current_setting('app.current_project_id')::uuid`. Multiple worktrees for a repo share the same project ID and are therefore within the same project isolation boundary.
+   - AWS parity: The interface seamlessly maps to AWS IAM / STS temporary credentials or an API Gateway Lambda authorizer providing equivalent project-scoped claims.
 
 ## API and concurrency
 
@@ -65,7 +86,9 @@ Expose `STATE_BASE_URL` separately from the inference configuration. Preserve se
 
 Measure from the WSL client to the active State API, excluding model generation and database wake-up. Use a representative corpus across two projects and concurrent chatbot, worker and telemetry traffic. Publish sample count, data size, concurrency, p50, p95, p99, errors and cold wake time separately.
 
-| Operation | Initial warm p95 target |
+The initial warm p95 latency targets are testable hypotheses to be verified in T-020, not validated facts. The architectural decision to avoid persistent connection pools (ensuring Aurora Serverless v2 can auto-pause during idle) means requests must pay the penalty of a fresh TLS handshake and Postgres login (or the latency of the RDS Data API), alongside API Gateway and Lambda overhead. T-020 will measure whether 100 ms is achievable under these constraints.
+
+| Operation | Initial warm p95 target (Hypothesis) |
 |---|---:|
 | Resume a session or fetch an unread handoff | 100 ms |
 | Search approved project memory | 200 ms |
