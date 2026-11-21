@@ -11,13 +11,25 @@ This is the task board for the kit itself. The installer uses [the blank board](
 
 ## Todo
 
+### Project State Service
+
+See the [low-level design](project-state-lld.md). Build and prove the WSL path before provisioning a persistent AWS database. The acceptance targets are warm p95 of 100 ms for session/inbox reads, 200 ms for memory search, and 250 ms for message delivery. Measure wake-up separately.
+
+- [ ] T-017 · Define the independent State API and PostgreSQL schema · Ship migrations, WSL Compose, stable project IDs and project-scoped credentials. Prove cross-project isolation and local backup/restore.
+- [ ] T-007 · Persist repo-scoped sessions, tasks and inboxes · Depends on T-017. Integrate worker checkpoints, leased assignments and revision-bound handoffs. Restart a reviewer and recover the same assignment with one recorded result.
+- [ ] T-018 · Record LiteLLM attempts and Laya decisions · Depends on T-017 and T-007. Correlate model retries, fallbacks, latency and reported usage. Verify durable buffering during an outage and idempotent delivery after recovery.
+- [ ] T-008 · Search approved project memory · Depends on T-017. Start with exact lookup and PostgreSQL full-text indexing. Return source references and benchmark representative file names, errors and decisions. Evaluate semantic retrieval after measuring recall gaps.
+- [ ] T-019 · Connect the real-time chatbot · Depends on T-007 and T-008. Add authorized WebSocket subscriptions, replay from the last acknowledged cursor, and a waking state. Test reconnect, duplicate delivery, outbox recovery and revoked access.
+- [ ] T-020 · Validate the independent AWS deployment · Depends on T-018 and T-019. Verify Sydney Aurora version, Free Plan eligibility and pre-credit budget. Benchmark the warm targets from WSL across two projects, idle auto-pause, cold wake and concurrent message delivery.
+- [ ] T-021 · Prove session and storage portability · Depends on T-020. Resume the same session after switching Sydney inference to local. Restore state on another host and verify checkpoints, unread handoffs, memory, artifacts and model history before cutover.
+
+### Other backlog
+
 - [ ] T-015 · Evaluate Laya on coding decisions · Collect approved task labels and measure incorrect ready verdicts and tier recommendations on held-out cases before enabling automatic model selection or fitting a checkpoint.
 
 - [ ] T-014 · Ship a standalone WSL runner · Rust launcher preview · The opt-in Cargo package forwards to the existing kit launcher. A future release needs to bootstrap its own worker and relay and pass the existing sandbox, gateway, and patch checks.
 
 - [ ] T-006 · Enforce the configured monthly usage ceiling in the gateway · limpid-ai-dev-stack · since 2026-11-19 · Reserve estimated usage before model calls and cap output, retries, and concurrency. Include embeddings, storage, and gateway usage before credits. AWS Budgets tracks spend separately.
-- [ ] T-007 · Persist per-repository task state and agent inboxes · coordination API and WSL workers · since 2026-11-19 · Prove that a reviewer can restart, recover an unread handoff, and review the same commit once. Gate all operations by repository access.
-- [ ] T-008 · Retrieve approved project memory by keyword and meaning · Sydney retrieval service · since 2026-11-19 · Compare direct S3 Vectors hybrid retrieval against exact lookup using real file names, errors, and decisions. Return source references and measure cost and latency. Read access has been checked. Index creation and search still need verification.
 - [ ] T-010 · Connect the personal Slack channel · local WSL configuration · since 2026-11-19 · Install a webhook for the chosen channel and verify delivery from an actual run. Keep the webhook and private task data out of Git and Slack notices.
 
 - [ ] T-011 · Add standalone planning and research workflows · WSL supervisor · since 2026-11-19 · Deferred while the personal coding workflow is the priority.
