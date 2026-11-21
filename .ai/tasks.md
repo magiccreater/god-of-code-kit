@@ -23,6 +23,18 @@ See the [low-level design](project-state-lld.md). Build and prove the WSL path b
 - [ ] T-020 · Validate the independent AWS deployment · Depends on T-018 and T-019. Verify Sydney Aurora version, Free Plan eligibility and pre-credit budget. Benchmark the warm targets from WSL across two projects, idle auto-pause, cold wake and concurrent message delivery.
 - [ ] T-021 · Prove session and storage portability · Depends on T-020. Resume the same session after switching Sydney inference to local. Restore state on another host and verify checkpoints, unread handoffs, memory, artifacts and model history before cutover.
 
+### PR governance and regression prevention
+
+See the [governance low-level design](pr-governance-lld.md). Start with deterministic CI and human-controlled exceptions. The first checks can ship independently of the Project State Service and inference gateway.
+
+- [ ] T-022 · Build the independent PR verifier · god-of-code-kit owns the reusable verifier. Pilot a trusted, head-bound check, acceptance-test mapping, base-to-head test change detection and applicable API contract checks. Verify a changed head invalidates the result.
+- [ ] T-023 · Enforce policy and review authority · Both repos adopt protected-path, dependency and contract policy with revision-bound human approvals. Pilot the required GitHub check in the public kit. The private infra repo needs a plan or host that supports native enforcement. Verify the worker cannot create approvals, modify trusted policy or publish the required check.
+- [ ] T-024 · Add targeted mutation testing · god-of-code-kit QA worktrees. Depends on T-022. Pilot one language adapter and a fixed time budget. Surface surviving meaningful mutants and distinguish equivalent mutants from execution failures.
+- [ ] T-025 · Sign and store revision-bound provenance · Depends on T-022 and T-023. A separate verifier identity signs the evidence. Verify altered revisions, stale policy and wrong signers fail. Export the signed evidence to durable state when T-017 is available.
+- [ ] T-026 · Pilot asynchronous specialist reviews · limpid-ai-dev-stack owns the LiteLLM routing and budget. Depends on T-023 and T-006. Evaluate security, performance and QA roles on approved inputs, with a human disposition for high-severity findings. Record evidence through T-018 when available.
+- [ ] T-027 · Benchmark model, prompt and tool changes · limpid-ai-dev-stack owns the release gate. Compare a frozen baseline to candidates on held-out coding cases. Publish pass, rework and cost deltas. Prove a known regression blocks promotion. Share approved outcome data with T-015.
+- [ ] T-028 · Surface governance and audit status · Depends on T-025 and T-017. Show PR decisions and evidence links through the Project State Service and attach operational cost and latency from LiteLLM via T-018. Complete T-010 for metadata-only Slack notices. Port.io is an optional export.
+
 ### Other backlog
 
 - [ ] T-015 · Evaluate Laya on coding decisions · Collect approved task labels and measure incorrect ready verdicts and tier recommendations on held-out cases before enabling automatic model selection or fitting a checkpoint.

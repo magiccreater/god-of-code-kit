@@ -16,6 +16,8 @@ The initial deployment is a Python HTTP API and PostgreSQL in WSL Docker Compose
 4. The developer writes a handoff for the exact commit, Git tree or immutable patch plus base digest it used. It includes test evidence and blockers. The reviewer has its own claim and writes a separate result tied to that revision. A revised patch requires a fresh review. GitHub remains the authority for merge approval.
 5. The state API commits messages and handoffs before delivering live notifications. The chatbot subscribes to project-authorized updates and can replay missed records after reconnecting.
 
+The [PR governance design](pr-governance-lld.md) uses the state service for portable audit history. GitHub retains merge authority and can enforce the verifier independently of the state service.
+
 ## PostgreSQL schema
 
 Use versioned SQL migrations and stable UUIDs. Include project_id in composite keys and foreign keys for all project-owned rows. Use UTC timestamps. Enforce project membership through the API and PostgreSQL row-level security. Use a non-owner request role and transaction-scoped authorization so pooled connections cannot retain the previous request's project scope. Internal worker and telemetry identities have separate grants.
